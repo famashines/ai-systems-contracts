@@ -26,8 +26,13 @@ you run `verify`.
 - `typescript` (npm alias of `@typescript/typescript6`) gives the
   TypeScript 6 API to typescript-eslint. TypeScript 7 has no JS API, and
   typescript-eslint 8 needs `typescript` below 6.1.
+- `overrides` pins `@typescript/old` (the TypeScript 6 package under the
+  alias) to an exact version.
 - `node_modules/.bin/tsc` is TypeScript 6. Do not use `npx tsc`. Use the
   npm scripts.
+- Editor limit: the alias has no `lib/tsserver.js`, so an editor cannot use
+  `node_modules/typescript` as the workspace TypeScript. It uses its own
+  bundled version. `npm run check` is the reference.
 
 Remove the TypeScript 6 alias when typescript-eslint supports
 TypeScript 7.
