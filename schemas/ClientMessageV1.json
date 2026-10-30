@@ -14,7 +14,8 @@
         },
         "token": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "lastSeq": {
           "type": "integer",
@@ -26,7 +27,8 @@
         "type",
         "v",
         "token"
-      ]
+      ],
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -52,7 +54,7 @@
               },
               {
                 "type": "string",
-                "pattern": "^task:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
               }
             ]
           }
@@ -61,7 +63,8 @@
       "required": [
         "type",
         "topics"
-      ]
+      ],
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -87,7 +90,7 @@
               },
               {
                 "type": "string",
-                "pattern": "^task:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
               }
             ]
           }
@@ -96,7 +99,8 @@
       "required": [
         "type",
         "topics"
-      ]
+      ],
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -107,13 +111,15 @@
         },
         "token": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         }
       },
       "required": [
         "type",
         "token"
-      ]
+      ],
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -129,7 +135,8 @@
       "required": [
         "type",
         "t"
-      ]
+      ],
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -145,7 +152,8 @@
       "required": [
         "type",
         "t"
-      ]
+      ],
+      "additionalProperties": false
     }
   ]
 }

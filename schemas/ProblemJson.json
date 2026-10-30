@@ -32,7 +32,10 @@
         "rate_limited",
         "internal",
         "unavailable",
-        "budget_refused"
+        "budget_refused",
+        "method_not_allowed",
+        "payload_too_large",
+        "unsupported_media_type"
       ]
     }
   },
