@@ -2,31 +2,41 @@ import { z } from "zod";
 import { Id } from "./common.ts";
 import { ErrorCode } from "./errors.ts";
 
-export const MAX_TOPICS = 50;
+export const WsLimits = {
+  clientFrameBytes: 65536,
+  clientFramesPerSecond: 20,
+  helloTimeoutMs: 5000,
+  pingIntervalMs: 20000,
+  pongTimeoutMs: 10000,
+  dropDeltasOverBytes: 1048576,
+  closeOverBytes: 4194304,
+  reconnectMinMs: 1000,
+  reconnectMaxMs: 30000,
+  maxTopics: 50,
+} as const;
 
 export const Topic = z.union([
   z.enum(["tasks", "budget", "agents", "notifications"]),
-  z.templateLiteral(["task:", z.uuid()]),
+  z.templateLiteral(["task:", Id]),
 ]);
 export type Topic = z.infer<typeof Topic>;
 
 const Seq = z.int().nonnegative();
-const Topics = z.array(Topic).min(1).max(MAX_TOPICS);
-const Ping = z.object({ type: z.literal("ping"), t: z.number() });
-const Pong = z.object({ type: z.literal("pong"), t: z.number() });
+const Token = z.string().min(1).max(8192);
+const Topics = z.array(Topic).min(1).max(WsLimits.maxTopics);
 
 export const ClientMessageV1 = z.discriminatedUnion("type", [
-  z.object({
+  z.strictObject({
     type: z.literal("hello"),
     v: z.literal(1),
-    token: z.string().min(1),
-    lastSeq: Seq.optional(),
+    token: Token,
+    lastSeq: Seq.exactOptional(),
   }),
-  z.object({ type: z.literal("subscribe"), topics: Topics }),
-  z.object({ type: z.literal("unsubscribe"), topics: Topics }),
-  z.object({ type: z.literal("reauth"), token: z.string().min(1) }),
-  Ping,
-  Pong,
+  z.strictObject({ type: z.literal("subscribe"), topics: Topics }),
+  z.strictObject({ type: z.literal("unsubscribe"), topics: Topics }),
+  z.strictObject({ type: z.literal("reauth"), token: Token }),
+  z.strictObject({ type: z.literal("ping"), t: z.number() }),
+  z.strictObject({ type: z.literal("pong"), t: z.number() }),
 ]);
 export type ClientMessageV1 = z.infer<typeof ClientMessageV1>;
 
@@ -42,8 +52,9 @@ export const ServerMessageV1 = z.discriminatedUnion("type", [
     type: z.literal("notice"),
     seq: z.int().positive(),
     topic: Topic,
-    docId: z.string().min(1),
+    docId: z.string().min(1).max(200),
     rev: z.int().nonnegative(),
+    commandId: Id.exactOptional(),
     data: z.unknown(),
   }),
   z.object({
@@ -51,15 +62,19 @@ export const ServerMessageV1 = z.discriminatedUnion("type", [
     taskId: Id,
     callId: Id,
     i: z.int().nonnegative(),
-    text: z.string(),
+    text: z.string().max(16384),
   }),
   z.object({
     type: z.literal("resync"),
     reason: z.enum(["too_old", "server_restart"]),
   }),
-  z.object({ type: z.literal("error"), code: ErrorCode, message: z.string() }),
-  Ping,
-  Pong,
+  z.object({
+    type: z.literal("error"),
+    code: ErrorCode,
+    message: z.string().max(1000),
+  }),
+  z.object({ type: z.literal("ping"), t: z.number() }),
+  z.object({ type: z.literal("pong"), t: z.number() }),
 ]);
 export type ServerMessageV1 = z.infer<typeof ServerMessageV1>;
 
