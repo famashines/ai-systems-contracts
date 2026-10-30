@@ -12,6 +12,7 @@ import {
   ProblemJson,
   RegisteredEvent,
   ServerMessageV1,
+  StreamId,
   SubmitTaskCommandPayloadV1,
   TaskListItemV1,
   TaskListResultV1,
@@ -20,9 +21,11 @@ import {
   Timestamp,
   Topic,
   WsCloseCode,
+  WsLimits,
 } from "../src/index.ts";
 
 const id = "0b9d3c4e-6f1a-4c2b-9d8e-7a6b5c4d3e2f";
+const upperId = id.toUpperCase();
 const now = "2026-10-31T09:15:00.000Z";
 const actor = { kind: "owner", id: "owner-1" };
 const item = {
@@ -32,6 +35,7 @@ const item = {
   createdAt: now,
   updatedAt: now,
   rev: 1,
+  asOf: 1,
 };
 const event = {
   eventId: id,
@@ -45,9 +49,37 @@ const event = {
   actor,
   payload: { taskId: id, text: "Write a plan", mode: "auto" },
 };
+const command = {
+  commandId: id,
+  type: "orchestration.SubmitTask",
+  actor,
+  payload: { text: "Hi" },
+};
+const notice = {
+  type: "notice",
+  seq: 6,
+  topic: "tasks",
+  docId: id,
+  rev: 2,
+  data: item,
+};
+const errorCodes = [
+  "validation_failed",
+  "not_found",
+  "conflict",
+  "unauthorized",
+  "forbidden",
+  "rate_limited",
+  "internal",
+  "unavailable",
+  "budget_refused",
+  "method_not_allowed",
+  "payload_too_large",
+  "unsupported_media_type",
+];
 
 const cases: [string, z.ZodType, unknown[], unknown[]][] = [
-  ["Id", Id, [id], ["x", "", 1]],
+  ["Id", Id, [id, crypto.randomUUID()], ["x", "", 1, upperId]],
   [
     "Timestamp",
     Timestamp,
@@ -63,7 +95,18 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { kind: "agent", id: "researcher" },
       { kind: "system", id: "orchestration" },
     ],
-    [{ kind: "user", id: "a" }, { kind: "owner", id: "" }, { kind: "owner" }],
+    [
+      { kind: "user", id: "a" },
+      { kind: "owner", id: "" },
+      { kind: "owner" },
+      { kind: "owner", id: "a".repeat(201) },
+    ],
+  ],
+  [
+    "StreamId",
+    StreamId,
+    [`task-${id}`, "budget-month-2026-10"],
+    ["task", "Task-1", `task-${"a".repeat(200)}`],
   ],
   [
     "EventEnvelopeV1",
@@ -76,54 +119,35 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...event, version: 0 },
       { ...event, schemaVersion: 0 },
       { ...event, occurredAt: "yesterday" },
+      { ...event, eventId: upperId },
     ],
   ],
   [
     "CommandEnvelopeV1",
     CommandEnvelopeV1(SubmitTaskCommandPayloadV1),
     [
-      {
-        commandId: id,
-        type: "orchestration.SubmitTask",
-        actor,
-        payload: { text: "Hi" },
-      },
-      {
-        commandId: id,
-        type: "orchestration.SubmitTask",
-        expectedVersion: 0,
-        actor,
-        payload: { text: "Hi" },
-      },
+      command,
+      { ...command, expectedVersion: 0 },
+      { ...command, expectedVersion: 3 },
     ],
     [
-      {
-        commandId: "1",
-        type: "orchestration.SubmitTask",
-        actor,
-        payload: { text: "Hi" },
-      },
-      {
-        commandId: id,
-        type: "orchestration.SubmitTask",
-        expectedVersion: -1,
-        actor,
-        payload: { text: "Hi" },
-      },
-      {
-        commandId: id,
-        type: "orchestration.SubmitTask",
-        actor,
-        payload: { text: "" },
-      },
+      { ...command, commandId: "1" },
+      { ...command, expectedVersion: -1 },
+      { ...command, payload: { text: "" } },
     ],
   ],
   [
     "SubmitTaskCommandPayloadV1",
     SubmitTaskCommandPayloadV1,
-    [{ text: "Hi" }, { text: "x".repeat(20000), mode: "auto" }],
+    [
+      { text: "Hi" },
+      { text: "x".repeat(20000), mode: "auto" },
+      { text: " line one\n\tline two " },
+    ],
     [
       { text: "" },
+      { text: "   \n\t" },
+      { text: "a\0b" },
       { text: "x".repeat(20001) },
       { text: "Hi", mode: "manual" },
       {},
@@ -152,6 +176,16 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...item, status: "x" },
       { ...item, rev: -1 },
       { ...item, title: "" },
+      { ...item, title: "a".repeat(201) },
+      { ...item, asOf: 0 },
+      {
+        taskId: id,
+        title: "Plan",
+        status: "submitted",
+        createdAt: now,
+        updatedAt: now,
+        rev: 1,
+      },
     ],
   ],
   [
@@ -167,14 +201,14 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     "Topic",
     Topic,
     ["tasks", "budget", "agents", "notifications", `task:${id}`],
-    ["task", "task:1", "chat"],
+    ["task", "task:1", "chat", `task:${upperId}`],
   ],
   [
     "ClientMessageV1",
     ClientMessageV1,
     [
       { type: "hello", v: 1, token: "t" },
-      { type: "hello", v: 1, token: "t", lastSeq: 42 },
+      { type: "hello", v: 1, token: "t".repeat(8192), lastSeq: 42 },
       { type: "subscribe", topics: ["tasks", `task:${id}`] },
       { type: "unsubscribe", topics: ["budget"] },
       { type: "reauth", token: "t2" },
@@ -184,10 +218,14 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       { type: "hello", v: 2, token: "t" },
       { type: "hello", v: 1, token: "" },
+      { type: "hello", v: 1, token: "t".repeat(8193) },
+      { type: "hello", v: 1, token: "t", extra: true },
+      { type: "reauth", token: "t".repeat(8193) },
       { type: "subscribe", topics: [] },
       { type: "subscribe", topics: Array.from({ length: 51 }, () => "tasks") },
       { type: "welcome", sessionId: id, headSeq: 0, heartbeatMs: 20000 },
       { type: "ping" },
+      { type: "ping", t: 1, x: 1 },
     ],
   ],
   [
@@ -196,7 +234,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       { type: "welcome", sessionId: id, headSeq: 0, heartbeatMs: 20000 },
       { type: "subscribed", topics: ["tasks"], fromSeq: 5 },
-      { type: "notice", seq: 6, topic: "tasks", docId: id, rev: 2, data: item },
+      notice,
+      { ...notice, commandId: id },
       { type: "delta", taskId: id, callId: id, i: 0, text: "Hel" },
       { type: "resync", reason: "too_old" },
       { type: "resync", reason: "server_restart" },
@@ -206,28 +245,17 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     ],
     [
       { type: "hello", v: 1, token: "t" },
-      { type: "notice", seq: 0, topic: "tasks", docId: id, rev: 2, data: {} },
+      { ...notice, seq: 0 },
+      { ...notice, commandId: "x" },
+      { ...notice, docId: "a".repeat(201) },
       { type: "resync", reason: "later" },
       { type: "error", code: "oops", message: "x" },
+      { type: "error", code: "internal", message: "x".repeat(1001) },
       { type: "delta", taskId: id, callId: id, i: -1, text: "x" },
+      { type: "delta", taskId: id, callId: id, i: 0, text: "x".repeat(16385) },
     ],
   ],
-  [
-    "ErrorCode",
-    ErrorCode,
-    [
-      "validation_failed",
-      "not_found",
-      "conflict",
-      "unauthorized",
-      "forbidden",
-      "rate_limited",
-      "internal",
-      "unavailable",
-      "budget_refused",
-    ],
-    ["teapot"],
-  ],
+  ["ErrorCode", ErrorCode, errorCodes, ["teapot"]],
   [
     "ProblemJson",
     ProblemJson,
@@ -237,6 +265,12 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
         title: "Not found",
         status: 404,
         code: "not_found",
+      },
+      {
+        type: "about:blank",
+        title: "Payload too large",
+        status: 413,
+        code: "payload_too_large",
       },
       {
         type: "https://ai.famashines.com/problems/conflict",
@@ -303,9 +337,59 @@ test("SubmitTask mode is approval by default", () => {
   );
 });
 
-test("close codes match ARCHITECTURE 10.2", () => {
-  assert.deepEqual(
-    Object.values(WsCloseCode).sort(),
-    [1012, 4400, 4401, 4403, 4408, 4429],
+test("expectedVersion and other optional fields refuse an explicit undefined", () => {
+  assert.equal(
+    CommandEnvelopeV1(SubmitTaskCommandPayloadV1).safeParse({
+      ...command,
+      expectedVersion: undefined,
+    }).success,
+    false,
   );
+  assert.equal(
+    ClientMessageV1.safeParse({
+      type: "hello",
+      v: 1,
+      token: "t",
+      lastSeq: undefined,
+    }).success,
+    false,
+  );
+});
+
+test("envelopes and payloads strip unknown keys", () => {
+  const parsed = EventEnvelopeV1(TaskSubmittedEventPayloadV1).parse({
+    ...event,
+    _id: id,
+    publishedAt: now,
+    payload: { ...event.payload, extra: 1 },
+  });
+  assert.equal("_id" in parsed, false);
+  assert.equal("publishedAt" in parsed, false);
+  assert.equal("extra" in parsed.payload, false);
+});
+
+test("close codes match ARCHITECTURE 10.2", () => {
+  assert.deepEqual(WsCloseCode, {
+    badMessage: 4400,
+    auth: 4401,
+    forbiddenTopic: 4403,
+    slowConsumer: 4408,
+    rateLimit: 4429,
+    serverRestart: 1012,
+  });
+});
+
+test("WebSocket limits match ARCHITECTURE 10.2", () => {
+  assert.deepEqual(WsLimits, {
+    clientFrameBytes: 65536,
+    clientFramesPerSecond: 20,
+    helloTimeoutMs: 5000,
+    pingIntervalMs: 20000,
+    pongTimeoutMs: 10000,
+    dropDeltasOverBytes: 1048576,
+    closeOverBytes: 4194304,
+    reconnectMinMs: 1000,
+    reconnectMaxMs: 30000,
+    maxTopics: 50,
+  });
 });
