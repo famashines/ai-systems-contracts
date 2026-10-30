@@ -20,7 +20,7 @@ const event = parseEvent(message);
 
 | File                   | Content                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------- |
-| `src/common.ts`        | `Id` (lower-case uuid), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`             |
+| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`          |
 | `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                            |
 | `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted` event, task list result, `TaskStatus`         |
 | `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`          |
@@ -68,7 +68,8 @@ new approval.
 - Topics: one `subscribe` message has at most 50 topics. The gateway
   enforces `WsLimits.maxTopics` (50) for all topics of one connection
   together, not for each message.
-- Ids are lower-case uuids. Make them with `crypto.randomUUID()`.
+- Ids are lower-case UUID v4 (ADR 0022). Make them with
+  `crypto.randomUUID()`.
 
 ## Events
 
@@ -102,6 +103,9 @@ new approval.
 A schema is released when a tag contains it. Never edit a released schema,
 with one exception: you can add an optional field in a minor release. Old
 readers strip the field, and new readers see it absent in old data.
+This exception does not apply to `ClientMessageV1`: it uses strict objects,
+so an old gateway refuses a new client field. Deploy the gateway with the
+new field before the app sends it.
 
 Every other change needs a new schema version:
 
