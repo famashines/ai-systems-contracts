@@ -6,8 +6,8 @@ export type TaskMode = z.infer<typeof TaskMode>;
 
 export const TaskText = z
   .string()
-  .max(20000)
-  .regex(/^[^\0]*[^\0\s][^\0]*$/);
+  .max(20000, { abort: true })
+  .regex(/^(?=[^\0]*\S)[^\0]*$/);
 
 export const SubmitTaskCommandPayloadV1 = z.object({
   text: TaskText,
