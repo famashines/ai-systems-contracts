@@ -32,9 +32,6 @@
     "drift": "npm run generate && git diff --exit-code -- schemas docs && git status --porcelain -- schemas docs | (! grep .)",
     "verify": "npm run check && npm run lint && npm test && npm run drift"
   },
-  "dependencies": {
-    "zod": "4.6.7"
-  },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.6",
@@ -42,6 +39,13 @@
     "prettier": "3.9.10",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-7": "npm:typescript@7.0.2",
-    "typescript-eslint": "8.72.1"
+    "typescript-eslint": "8.72.1",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "zod": "^4.6.7"
+  },
+  "overrides": {
+    "@typescript/old": "6.0.3"
   }
 }
