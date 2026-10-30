@@ -5,7 +5,7 @@
     "text": {
       "type": "string",
       "maxLength": 20000,
-      "pattern": "^[^\\0]*[^\\0\\s][^\\0]*$"
+      "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
     },
     "mode": {
       "default": "approval",
