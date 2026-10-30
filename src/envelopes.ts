@@ -3,8 +3,12 @@ import { Actor, Id, Timestamp } from "./common.ts";
 
 export const MessageType = z
   .string()
+  .max(100)
   .regex(/^[a-z][a-zA-Z]*\.[A-Z][a-zA-Z0-9]*$/);
-export const StreamId = z.string().regex(/^[a-z][a-z0-9]*-\S+$/);
+export const StreamId = z
+  .string()
+  .max(200)
+  .regex(/^[a-z][a-z0-9]*-\S+$/);
 
 export const EventEnvelopeV1 = <P extends z.ZodType>(payload: P) =>
   z.object({
@@ -28,7 +32,7 @@ export const CommandEnvelopeV1 = <P extends z.ZodType>(payload: P) =>
   z.object({
     commandId: Id,
     type: MessageType,
-    expectedVersion: z.int().nonnegative().optional(),
+    expectedVersion: z.int().nonnegative().exactOptional(),
     actor: Actor,
     payload,
   });
