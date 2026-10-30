@@ -10,6 +10,9 @@ export const ErrorCode = z.enum([
   "internal",
   "unavailable",
   "budget_refused",
+  "method_not_allowed",
+  "payload_too_large",
+  "unsupported_media_type",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
@@ -17,8 +20,8 @@ export const ProblemJson = z.object({
   type: z.string().min(1),
   title: z.string().min(1),
   status: z.int().min(400).max(599),
-  detail: z.string().optional(),
-  instance: z.string().optional(),
+  detail: z.string().exactOptional(),
+  instance: z.string().exactOptional(),
   code: ErrorCode,
 });
 export type ProblemJson = z.infer<typeof ProblemJson>;
