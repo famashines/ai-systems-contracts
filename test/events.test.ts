@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
+import { defineEvents } from "../src/define-events.ts";
 import {
   eventCatalog,
   eventRegistry,
@@ -86,4 +87,76 @@ test("catalog types use the <context>.<EventName> form", () => {
     assert.match(type, /^[a-z][a-zA-Z]*\.[A-Z][a-zA-Z0-9]*$/);
     assert.ok(Number.isInteger(schemaVersion) && schemaVersion >= 1);
   }
+});
+
+const fixture = defineEvents(
+  Object.freeze({
+    "test.Alpha": Object.freeze({
+      1: z.object({ a: z.string() }),
+      2: z.object({ a: z.string(), b: z.int() }),
+    }),
+    "test.Beta": Object.freeze({ 1: z.object({ c: z.boolean() }) }),
+  }),
+);
+const base = { ...event, streamId: `test-${id}` };
+
+test("a registry with two types and two versions parses each version", () => {
+  const v1 = fixture.parse({
+    ...base,
+    type: "test.Alpha",
+    schemaVersion: 1,
+    payload: { a: "x" },
+  });
+  const v2 = fixture.parse({
+    ...base,
+    type: "test.Alpha",
+    schemaVersion: 2,
+    payload: { a: "x", b: 2 },
+  });
+  const beta = fixture.parse({
+    ...base,
+    type: "test.Beta",
+    schemaVersion: 1,
+    payload: { c: true },
+  });
+  assert.equal(v1.schemaVersion, 1);
+  if (v2.type === "test.Alpha" && v2.schemaVersion === 2)
+    assert.equal(v2.payload.b, 2);
+  else assert.fail("expected test.Alpha v2");
+  if (beta.type === "test.Beta") assert.equal(beta.payload.c, true);
+  else assert.fail("expected test.Beta");
+});
+
+test("a registry with two versions checks the payload of the stated version", () => {
+  assert.throws(
+    () =>
+      fixture.parse({
+        ...base,
+        type: "test.Alpha",
+        schemaVersion: 2,
+        payload: { a: "x" },
+      }),
+    z.ZodError,
+  );
+  assert.throws(
+    () =>
+      fixture.parse({
+        ...base,
+        type: "test.Beta",
+        schemaVersion: 2,
+        payload: { c: true },
+      }),
+    z.ZodError,
+  );
+});
+
+test("a registry with two versions has a full catalog and the right latest", () => {
+  assert.deepEqual(
+    fixture.catalog.map(
+      ({ type, schemaVersion }) => `${type}.v${String(schemaVersion)}`,
+    ),
+    ["test.Alpha.v1", "test.Alpha.v2", "test.Beta.v1"],
+  );
+  assert.equal(fixture.latest("test.Alpha").schemaVersion, 2);
+  assert.equal(fixture.latest("test.Beta").schemaVersion, 1);
 });

@@ -3,6 +3,8 @@ import { describe, test } from "node:test";
 import { z } from "zod";
 import {
   Actor,
+  MessageType,
+  TaskText,
   ClientMessageV1,
   CommandEnvelopeV1,
   ErrorCode,
@@ -79,7 +81,20 @@ const errorCodes = [
 ];
 
 const cases: [string, z.ZodType, unknown[], unknown[]][] = [
-  ["Id", Id, [id, crypto.randomUUID()], ["x", "", 1, upperId]],
+  [
+    "Id",
+    Id,
+    [id, crypto.randomUUID()],
+    [
+      "x",
+      "",
+      1,
+      upperId,
+      "0193f1d2-7c4a-7b2e-8d3f-6a5b4c3d2e1f",
+      "0b9d3c4e-6f1a-1c2b-9d8e-7a6b5c4d3e2f",
+      "0b9d3c4e-6f1a-4c2b-cd8e-7a6b5c4d3e2f",
+    ],
+  ],
   [
     "Timestamp",
     Timestamp,
@@ -392,4 +407,25 @@ test("WebSocket limits match ARCHITECTURE 10.2", () => {
     reconnectMaxMs: 30000,
     maxTopics: 50,
   });
+});
+
+test("long untrusted strings are checked in linear time", () => {
+  const inputs: [z.ZodType, string][] = [
+    [TaskText, "a".repeat(20000) + "\0"],
+    [TaskText, "a".repeat(19999) + "\0"],
+    [TaskText, "a".repeat(200000) + "\0"],
+    [StreamId, "a".repeat(200000)],
+    [MessageType, "a." + "A".repeat(200000) + "!"],
+    [Id, "0".repeat(200000)],
+    [Topic, "task:" + "0".repeat(200000)],
+  ];
+  for (const [schema, value] of inputs) {
+    const start = performance.now();
+    assert.equal(schema.safeParse(value).success, false);
+    const ms = performance.now() - start;
+    assert.ok(
+      ms < 50,
+      `${String(value.length)} chars took ${ms.toFixed(1)} ms`,
+    );
+  }
 });
