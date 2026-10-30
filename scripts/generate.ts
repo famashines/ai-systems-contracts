@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import * as contracts from "../src/index.ts";
-import { eventRegistry, eventSchema, eventTypes } from "../src/index.ts";
+import { eventCatalog } from "../src/index.ts";
 
 type JsonSchema = {
   type?: string;
@@ -43,10 +43,9 @@ const lines = [
 ];
 const sections: string[] = [];
 
-for (const type of eventTypes) {
-  const { schemaVersion, payload } = eventRegistry[type];
+for (const { type, schemaVersion, payload, schema } of eventCatalog) {
   const file = `events/${type}.v${String(schemaVersion)}.json`;
-  write(`schemas/${file}`, toJson(eventSchema(type)));
+  write(`schemas/${file}`, toJson(schema));
   const meaning = payload.description ?? "";
   lines.push(
     `| \`${type}\` | ${String(schemaVersion)} | ${meaning} | [${file}](../schemas/${file}) |`,
