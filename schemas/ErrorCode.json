@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "enum": [
+    "validation_failed",
+    "not_found",
+    "conflict",
+    "unauthorized",
+    "forbidden",
+    "rate_limited",
+    "internal",
+    "unavailable",
+    "budget_refused"
+  ]
+}

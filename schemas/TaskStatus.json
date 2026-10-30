@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "enum": [
+    "submitted",
+    "clarifying",
+    "planning",
+    "awaiting_approval",
+    "running",
+    "paused",
+    "completed",
+    "failed",
+    "cancelled",
+    "rejected"
+  ]
+}
