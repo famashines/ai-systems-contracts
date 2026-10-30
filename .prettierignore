@@ -1,0 +1,4 @@
+dist/
+schemas/
+docs/events.md
+package-lock.json
