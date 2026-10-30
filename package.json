@@ -46,6 +46,6 @@
     "zod": "^4.6.7"
   },
   "overrides": {
-    "@typescript/old": "6.0.3"
+    "@typescript/old": "npm:typescript@6.0.3"
   }
 }
