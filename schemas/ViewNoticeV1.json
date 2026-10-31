@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "topic": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "tasks",
+            "budget",
+            "agents",
+            "notifications"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "string",
+          "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      ]
+    },
+    "docId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "rev": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "data": {},
+    "commandId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }
+  },
+  "required": [
+    "topic",
+    "docId",
+    "rev",
+    "data"
+  ],
+  "description": "A read model document changed."
+}

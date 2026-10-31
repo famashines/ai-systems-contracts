@@ -18,6 +18,7 @@ export const WsLimits = {
 export const Topic = z.union([
   z.enum(["tasks", "budget", "agents", "notifications"]),
   z.templateLiteral(["task:", Id]),
+  z.templateLiteral(["conversation:", Id]),
 ]);
 export type Topic = z.infer<typeof Topic>;
 

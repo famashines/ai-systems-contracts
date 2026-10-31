@@ -24,6 +24,7 @@ const event = parseEvent(message);
 | `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                            |
 | `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted` event, task list result, `TaskStatus`         |
 | `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`          |
+| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`   |
 | `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10) |
 | `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                            |
 
@@ -97,6 +98,35 @@ new approval.
 3. Add valid and invalid examples to `test/schemas.test.ts`.
 4. Run `npm run generate` and commit `schemas/` and `docs/events.md`.
 5. Add the change to `CHANGELOG.md`.
+
+## Views
+
+projections writes a notice for each read model change, through its
+outbox, to the JetStream stream `VIEWS` (ADR 0010). A message on `VIEWS`
+is a `ViewMessageV1`: the event envelope of the outbox, with the subject
+in `type` and a `ViewNoticeV1` in `payload`.
+
+```
+{ eventId, type: "view.tasks", schemaVersion: 1, streamId, version,
+  occurredAt, correlationId, causationId, actor,
+  payload: { topic: "tasks", docId, rev, data, commandId? } }
+```
+
+`ViewMessageV1` has its own `type` schema (`ViewSubject`), because a view
+subject is not a `<context>.<EventName>` type. The header `Nats-Msg-Id`
+is the `eventId`.
+
+| Topic               | Subject                  |
+| ------------------- | ------------------------ |
+| `tasks`             | `view.tasks`             |
+| `task:<id>`         | `view.task.<id>`         |
+| `conversation:<id>` | `view.conversation.<id>` |
+| `budget`            | `view.budget`            |
+| `agents`            | `view.agents`            |
+| `notifications`     | `view.notifications`     |
+
+`viewSubject(topic)` gives the subject. `topicFromSubject(subject)` gives
+the topic, and throws a `ZodError` for a subject that is not in the table.
 
 ## Schema versioning rule
 

@@ -22,6 +22,11 @@ import {
   TaskSubmittedEventPayloadV1,
   Timestamp,
   Topic,
+  topicFromSubject,
+  ViewMessageV1,
+  ViewNoticeV1,
+  viewSubject,
+  ViewSubject,
   WsCloseCode,
   WsLimits,
 } from "../src/index.ts";
@@ -64,6 +69,20 @@ const notice = {
   docId: id,
   rev: 2,
   data: item,
+};
+const view = {
+  topic: "tasks",
+  docId: id,
+  rev: 1,
+  data: item,
+  commandId: id,
+};
+const viewMessage = {
+  ...event,
+  type: "view.tasks",
+  streamId: `tasks-${id}`,
+  actor: { kind: "system", id: "projections" },
+  payload: view,
 };
 const errorCodes = [
   "validation_failed",
@@ -215,8 +234,57 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "Topic",
     Topic,
-    ["tasks", "budget", "agents", "notifications", `task:${id}`],
-    ["task", "task:1", "chat", `task:${upperId}`],
+    [
+      "tasks",
+      "budget",
+      "agents",
+      "notifications",
+      `task:${id}`,
+      `conversation:${id}`,
+    ],
+    ["task", "task:1", "chat", `task:${upperId}`, "conversation:1"],
+  ],
+  [
+    "ViewSubject",
+    ViewSubject,
+    [
+      "view.tasks",
+      "view.budget",
+      "view.agents",
+      "view.notifications",
+      `view.task.${id}`,
+      `view.conversation.${id}`,
+    ],
+    ["tasks", "view.task", `view.task:${id}`, `view.tasks.${id}`, "view.>"],
+  ],
+  [
+    "ViewNoticeV1",
+    ViewNoticeV1,
+    [
+      view,
+      { topic: `task:${id}`, docId: id, rev: 0, data: null },
+      { topic: "budget", docId: "2026-10", rev: 3, data: { spent: 1 } },
+    ],
+    [
+      { ...view, topic: "chat" },
+      { ...view, docId: "" },
+      { ...view, docId: "a".repeat(201) },
+      { ...view, rev: -1 },
+      { ...view, rev: 1.5 },
+      { ...view, rev: Number.MAX_SAFE_INTEGER + 1 },
+      { ...view, commandId: "x" },
+      { topic: "tasks", rev: 1, data: item },
+    ],
+  ],
+  [
+    "ViewMessageV1",
+    ViewMessageV1,
+    [viewMessage, { ...viewMessage, type: `view.task.${id}` }],
+    [
+      { ...viewMessage, type: "orchestration.TaskSubmitted" },
+      { ...viewMessage, payload: { ...view, rev: -1 } },
+      { ...viewMessage, payload: undefined },
+    ],
   ],
   [
     "ClientMessageV1",
@@ -418,6 +486,7 @@ test("long untrusted strings are checked in linear time", () => {
     [MessageType, "a." + "A".repeat(200000) + "!"],
     [Id, "0".repeat(200000)],
     [Topic, "task:" + "0".repeat(200000)],
+    [ViewSubject, "view.task." + "0".repeat(200000)],
   ];
   for (const [schema, value] of inputs) {
     const start = performance.now();
@@ -427,5 +496,26 @@ test("long untrusted strings are checked in linear time", () => {
       ms < 50,
       `${String(value.length)} chars took ${ms.toFixed(1)} ms`,
     );
+  }
+});
+
+test("viewSubject and topicFromSubject map each topic form both ways", () => {
+  const pairs: [Topic, string][] = [
+    ["tasks", "view.tasks"],
+    ["budget", "view.budget"],
+    ["agents", "view.agents"],
+    ["notifications", "view.notifications"],
+    [`task:${id}`, `view.task.${id}`],
+    [`conversation:${id}`, `view.conversation.${id}`],
+  ];
+  for (const [topic, subject] of pairs) {
+    assert.equal(viewSubject(topic), subject);
+    assert.equal(topicFromSubject(subject), topic);
+  }
+});
+
+test("topicFromSubject refuses a subject that is not a view subject", () => {
+  for (const subject of ["tasks", "view.", "view.chat", `view.task.${id}.x`]) {
+    assert.throws(() => topicFromSubject(subject), z.ZodError, subject);
   }
 });
