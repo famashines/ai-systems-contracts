@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "welcome"
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "headSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "heartbeatMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "type",
+        "sessionId",
+        "headSeq",
+        "heartbeatMs"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "subscribed"
+        },
+        "topics": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "tasks",
+                  "budget",
+                  "agents",
+                  "notifications"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              }
+            ]
+          }
+        },
+        "fromSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "type",
+        "topics",
+        "fromSeq"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "notice"
+        },
+        "seq": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "topic": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "tasks",
+                "budget",
+                "agents",
+                "notifications"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          ]
+        },
+        "docId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "rev": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "commandId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "data": {}
+      },
+      "required": [
+        "type",
+        "seq",
+        "topic",
+        "docId",
+        "rev",
+        "data"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "delta"
+        },
+        "taskId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "callId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "i": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 16384
+        }
+      },
+      "required": [
+        "type",
+        "taskId",
+        "callId",
+        "i",
+        "text"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "resync"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "too_old",
+            "server_restart"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "reason"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "error"
+        },
+        "code": {
+          "type": "string",
+          "enum": [
+            "validation_failed",
+            "not_found",
+            "conflict",
+            "unauthorized",
+            "forbidden",
+            "rate_limited",
+            "internal",
+            "unavailable",
+            "budget_refused",
+            "method_not_allowed",
+            "payload_too_large",
+            "unsupported_media_type"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "type",
+        "code",
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ping"
+        },
+        "t": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "t"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "pong"
+        },
+        "t": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "t"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@famashines/ai-systems-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "zod schemas that ai-systems services and the app share",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/famashines/ai-systems-contracts.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node node_modules/typescript-7/bin/tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "check": "node node_modules/typescript-7/bin/tsc -p tsconfig.json",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "node --test --experimental-test-coverage --test-coverage-include='src/**' --test-coverage-lines=90 --test-coverage-branches=85 'test/**/*.test.ts'",
+    "generate": "node scripts/generate.ts",
+    "drift": "npm run generate && git diff --exit-code -- schemas docs && git status --porcelain -- schemas docs | (! grep .)",
+    "verify": "npm run check && npm run lint && npm test && npm run drift"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "prettier": "3.9.10",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript-7": "npm:typescript@7.0.2",
+    "typescript-eslint": "8.72.1",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "zod": "^4.6.7"
+  },
+  "overrides": {
+    "@typescript/old": "npm:typescript@6.0.3"
+  }
+}
