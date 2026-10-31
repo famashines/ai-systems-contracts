@@ -536,8 +536,11 @@ test("ViewMessageV1 refuses a type that is not the subject of the topic", () => 
     ...viewMessage,
     type: `view.task.${id}`,
   });
-  assert.equal(result.success, false);
-  assert.deepEqual(result.error?.issues[0]?.path, ["type"]);
+  assert.ok(!result.success);
+  assert.deepEqual(
+    result.error.issues.map((issue) => issue.path),
+    [["type"]],
+  );
   assert.equal(
     ViewMessageV1.safeParse({
       ...viewMessage,
