@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- `RunCompletedEventPayloadV1`: a description only, no schema change.
+  `costMicroUsd` is the cost of the attempt that gave the answer. The cost
+  of the task is the sum of the `llm.*` costs. The event description says
+  the same.
+
 ## 0.3.0
 
 Released schemas that this version changes:

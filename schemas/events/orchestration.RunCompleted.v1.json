@@ -83,7 +83,8 @@
         "costMicroUsd": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9007199254740991
+          "maximum": 9007199254740991,
+          "description": "The cost of the attempt that gave the answer. The cost of the task is the sum of the llm.* costs."
         }
       },
       "required": [
@@ -92,7 +93,7 @@
         "summary",
         "costMicroUsd"
       ],
-      "description": "The run ended with a result summary and its total cost."
+      "description": "The run ended with a result summary and the cost of the attempt that gave it."
     }
   },
   "required": [

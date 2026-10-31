@@ -95,9 +95,13 @@ export const RunCompletedEventPayloadV1 = z
     taskId: Id,
     runId: Id,
     summary: ReplyText,
-    costMicroUsd: MicroUsd,
+    costMicroUsd: MicroUsd.describe(
+      "The cost of the attempt that gave the answer. The cost of the task is the sum of the llm.* costs.",
+    ),
   })
-  .describe("The run ended with a result summary and its total cost.");
+  .describe(
+    "The run ended with a result summary and the cost of the attempt that gave it.",
+  );
 export type RunCompletedEventPayloadV1 = z.infer<
   typeof RunCompletedEventPayloadV1
 >;
