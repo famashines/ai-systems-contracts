@@ -234,15 +234,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "Topic",
     Topic,
-    [
-      "tasks",
-      "budget",
-      "agents",
-      "notifications",
-      `task:${id}`,
-      `conversation:${id}`,
-    ],
-    ["task", "task:1", "chat", `task:${upperId}`, "conversation:1"],
+    ["tasks", "budget", "agents", "notifications", `task:${id}`],
+    ["task", "task:1", "chat", `task:${upperId}`, `conversation:${id}`],
   ],
   [
     "ViewSubject",
@@ -253,9 +246,15 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       "view.agents",
       "view.notifications",
       `view.task.${id}`,
-      `view.conversation.${id}`,
     ],
-    ["tasks", "view.task", `view.task:${id}`, `view.tasks.${id}`, "view.>"],
+    [
+      `view.conversation.${id}`,
+      "tasks",
+      "view.task",
+      `view.task:${id}`,
+      `view.tasks.${id}`,
+      "view.>",
+    ],
   ],
   [
     "ViewNoticeV1",
@@ -279,7 +278,14 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "ViewMessageV1",
     ViewMessageV1,
-    [viewMessage, { ...viewMessage, type: `view.task.${id}` }],
+    [
+      viewMessage,
+      {
+        ...viewMessage,
+        type: `view.task.${id}`,
+        payload: { ...view, topic: `task:${id}` },
+      },
+    ],
     [
       { ...viewMessage, type: "orchestration.TaskSubmitted" },
       { ...viewMessage, payload: { ...view, rev: -1 } },
@@ -506,7 +512,6 @@ test("viewSubject and topicFromSubject map each topic form both ways", () => {
     ["agents", "view.agents"],
     ["notifications", "view.notifications"],
     [`task:${id}`, `view.task.${id}`],
-    [`conversation:${id}`, `view.conversation.${id}`],
   ];
   for (const [topic, subject] of pairs) {
     assert.equal(viewSubject(topic), subject);
@@ -515,7 +520,29 @@ test("viewSubject and topicFromSubject map each topic form both ways", () => {
 });
 
 test("topicFromSubject refuses a subject that is not a view subject", () => {
-  for (const subject of ["tasks", "view.", "view.chat", `view.task.${id}.x`]) {
+  for (const subject of [
+    "tasks",
+    "view.",
+    "view.chat",
+    `view.task.${id}.x`,
+    `view.conversation.${id}`,
+  ]) {
     assert.throws(() => topicFromSubject(subject), z.ZodError, subject);
   }
+});
+
+test("ViewMessageV1 refuses a type that is not the subject of the topic", () => {
+  const result = ViewMessageV1.safeParse({
+    ...viewMessage,
+    type: `view.task.${id}`,
+  });
+  assert.equal(result.success, false);
+  assert.deepEqual(result.error?.issues[0]?.path, ["type"]);
+  assert.equal(
+    ViewMessageV1.safeParse({
+      ...viewMessage,
+      payload: { ...view, topic: "budget" },
+    }).success,
+    false,
+  );
 });

@@ -6,7 +6,6 @@ import { Topic } from "./ws.ts";
 export const ViewSubject = z.union([
   z.enum(["view.tasks", "view.budget", "view.agents", "view.notifications"]),
   z.templateLiteral(["view.task.", Id]),
-  z.templateLiteral(["view.conversation.", Id]),
 ]);
 export type ViewSubject = z.infer<typeof ViewSubject>;
 
@@ -21,13 +20,16 @@ export const ViewNoticeV1 = z
   .describe("A read model document changed.");
 export type ViewNoticeV1 = z.infer<typeof ViewNoticeV1>;
 
-export const ViewMessageV1 = EventEnvelopeV1(ViewNoticeV1).extend({
-  type: ViewSubject,
-});
-export type ViewMessageV1 = z.infer<typeof ViewMessageV1>;
-
 export const viewSubject = (topic: Topic): ViewSubject =>
   `view.${topic.replace(":", ".")}` as ViewSubject;
+
+export const ViewMessageV1 = EventEnvelopeV1(ViewNoticeV1)
+  .extend({ type: ViewSubject })
+  .refine((message) => message.type === viewSubject(message.payload.topic), {
+    message: "The type must be the subject of payload.topic",
+    path: ["type"],
+  });
+export type ViewMessageV1 = z.infer<typeof ViewMessageV1>;
 
 export const topicFromSubject = (subject: string): Topic =>
   Topic.parse(

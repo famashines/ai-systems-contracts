@@ -113,17 +113,17 @@ in `type` and a `ViewNoticeV1` in `payload`.
 ```
 
 `ViewMessageV1` has its own `type` schema (`ViewSubject`), because a view
-subject is not a `<context>.<EventName>` type. The header `Nats-Msg-Id`
+subject is not a `<context>.<EventName>` type. It also checks that `type`
+is the subject of `payload.topic`. The header `Nats-Msg-Id`
 is the `eventId`.
 
-| Topic               | Subject                  |
-| ------------------- | ------------------------ |
-| `tasks`             | `view.tasks`             |
-| `task:<id>`         | `view.task.<id>`         |
-| `conversation:<id>` | `view.conversation.<id>` |
-| `budget`            | `view.budget`            |
-| `agents`            | `view.agents`            |
-| `notifications`     | `view.notifications`     |
+| Topic           | Subject              |
+| --------------- | -------------------- |
+| `tasks`         | `view.tasks`         |
+| `task:<id>`     | `view.task.<id>`     |
+| `budget`        | `view.budget`        |
+| `agents`        | `view.agents`        |
+| `notifications` | `view.notifications` |
 
 `viewSubject(topic)` gives the subject. `topicFromSubject(subject)` gives
 the topic, and throws a `ZodError` for a subject that is not in the table.
