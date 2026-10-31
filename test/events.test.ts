@@ -68,11 +68,76 @@ test("parseEvent rejects a bad envelope", () => {
   assert.throws(() => parseEvent(null), z.ZodError);
 });
 
-test("the registry is frozen", () => {
+test("the registry and each of its entries are frozen", () => {
   assert.equal(Object.isFrozen(eventRegistry), true);
-  assert.equal(
-    Object.isFrozen(eventRegistry["orchestration.TaskSubmitted"]),
-    true,
+  for (const versions of Object.values(eventRegistry))
+    assert.equal(Object.isFrozen(versions), true);
+});
+
+test("parseEvent reads the events of each M2 context", () => {
+  const samples = [
+    {
+      type: "conversation.OwnerMessagePosted",
+      streamId: `conversation-${id}`,
+      payload: {
+        conversationId: id,
+        messageId: id,
+        text: "Hi",
+        intent: "answer",
+        taskId: id,
+      },
+    },
+    {
+      type: "llm.CallFailed",
+      streamId: `call-${id}`,
+      payload: {
+        callId: id,
+        attempt: 1,
+        model: "openai/gpt-4o",
+        errorClass: "timeout",
+        reason: "No answer",
+        costMicroUsd: 0,
+      },
+    },
+    {
+      type: "budget.ReservationExpired",
+      streamId: "budget-month-2026-10",
+      payload: { reservationId: id, amountMicroUsd: 25000 },
+    },
+    {
+      type: "agents.AgentEnabled",
+      streamId: `agent-${id}`,
+      payload: { agentId: id },
+    },
+    {
+      type: "prompts.PromptCreated",
+      streamId: `prompt-${id}`,
+      payload: { promptId: id, name: "Writer" },
+    },
+    {
+      type: "orchestration.RunStarted",
+      streamId: `task-${id}`,
+      payload: { taskId: id, runId: id },
+    },
+  ];
+  for (const sample of samples)
+    assert.equal(parseEvent({ ...event, ...sample }).type, sample.type);
+});
+
+test("parseEvent refuses a steer message with no taskId", () => {
+  assert.throws(
+    () =>
+      parseEvent({
+        ...event,
+        type: "conversation.OwnerMessagePosted",
+        payload: {
+          conversationId: id,
+          messageId: id,
+          text: "Hi",
+          intent: "steer",
+        },
+      }),
+    z.ZodError,
   );
 });
 

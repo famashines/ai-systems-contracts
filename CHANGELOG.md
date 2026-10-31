@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.0
+
+- Breaking: `resync.reason` has only `too_old`. The unused value
+  `server_restart` is removed. A restart closes the socket with `1012`.
+- `ServerMessageV1` has an `unsubscribed` message (`topics`).
+- `Topic` has `conversation:<id>`, and `ViewSubject` has
+  `view.conversation.<id>`. Deploy socket-gateway with this version
+  before the app subscribes to the topic, because `ClientMessageV1` is
+  strict.
+- `DeltaV1` (`{ i, text }`), the body of a core NATS delta, and
+  `deltaSubject(taskId, callId)`. The `delta` server message uses the same
+  rules.
+- `orchestration.TaskSubmitted` v1 has the optional fields
+  `conversationId` and `messageId`.
+- New events, all schema version 1: `orchestration.RunStarted`,
+  `RunCompleted`, `RunFailed`, `MessageRefused`;
+  `conversation.ConversationStarted`, `OwnerMessagePosted`,
+  `AgentReplyPosted`; `prompts.PromptCreated`, `PromptVersionPublished`;
+  `llm.CallStarted`, `CallCompleted`, `CallFailed`; `budget.BudgetSet`,
+  `FundsReserved`, `ReservationRefused`, `ReservationSettled`,
+  `ReservationExpired`, `ThresholdCrossed`; `agents.AgentCreated`,
+  `AgentVersionPublished`, `AgentVersionActivated`, `AgentEnabled`,
+  `AgentDisabled`.
+- New command payloads: `PostOwnerMessage`, `CreatePrompt`,
+  `PublishPromptVersion`, `CreateAgent`, `PublishAgentVersion`,
+  `ActivateAgentVersion`, `SetAgentEnabled`, `SetBudget`.
+- Budget rpc: `ReserveFundsRequestV1`, `ReserveFundsReplyV1`,
+  `SettleReservationRequestV1`, `SettleReservationReplyV1`, and
+  `RpcSubject` (`rpc.budget.reserve`, `rpc.budget.settle`).
+- Shared schemas: `Reason`, `ModelId`, `BudgetScope`, `BudgetMonth`,
+  `PromptRef`, `PromptText`, `PromptVariable`, `AgentRef`, `AgentName`,
+  `AgentLimits`, `LlmErrorClass`, `FinishReason`.
+- All money fields are `MicroUsd` integers.
+- `docs/events.md` shows the fields of a payload that is a union.
+
 ## 0.2.1
 
 - `engines.node` is `>=22.13`, so the app (Expo SDK 58, Node 22.13) can

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "month"
+            },
+            "key": {
+              "type": "string",
+              "maxLength": 7,
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "project",
+                "agent",
+                "task"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ]
+        }
+      ]
+    },
+    "cap": {
+      "type": "string",
+      "enum": [
+        "soft",
+        "hard"
+      ]
+    },
+    "percent": {
+      "type": "number",
+      "enum": [
+        50,
+        80,
+        100
+      ]
+    },
+    "spentMicroUsd": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "capMicroUsd": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": [
+    "scope",
+    "cap",
+    "percent",
+    "spentMicroUsd",
+    "capMicroUsd"
+  ],
+  "description": "Spend went over 50, 80 or 100% of a soft or hard cap."
+}

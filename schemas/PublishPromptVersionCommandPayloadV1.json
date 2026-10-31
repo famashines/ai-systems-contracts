@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "promptId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 100000,
+      "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
+    },
+    "variables": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-zA-Z0-9_]*$"
+      }
+    }
+  },
+  "required": [
+    "promptId",
+    "text",
+    "variables"
+  ]
+}

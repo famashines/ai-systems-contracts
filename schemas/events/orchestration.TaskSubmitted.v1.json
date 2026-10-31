@@ -81,6 +81,16 @@
             "auto",
             "approval"
           ]
+        },
+        "conversationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "messageId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         }
       },
       "required": [
@@ -88,7 +98,7 @@
         "text",
         "mode"
       ],
-      "description": "The owner sent a task."
+      "description": "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat."
     }
   },
   "required": [

@@ -6,14 +6,290 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 
 | Type | Schema version | Meaning | JSON Schema |
 | ---- | -------------- | ------- | ----------- |
-| `orchestration.TaskSubmitted` | 1 | The owner sent a task. | [events/orchestration.TaskSubmitted.v1.json](../schemas/events/orchestration.TaskSubmitted.v1.json) |
+| `orchestration.TaskSubmitted` | 1 | The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. | [events/orchestration.TaskSubmitted.v1.json](../schemas/events/orchestration.TaskSubmitted.v1.json) |
+| `orchestration.RunStarted` | 1 | Execution of the approved plan starts. | [events/orchestration.RunStarted.v1.json](../schemas/events/orchestration.RunStarted.v1.json) |
+| `orchestration.RunCompleted` | 1 | The run ended with a result summary and its total cost. | [events/orchestration.RunCompleted.v1.json](../schemas/events/orchestration.RunCompleted.v1.json) |
+| `orchestration.RunFailed` | 1 | The run ended with no result, with a code and a plain reason. | [events/orchestration.RunFailed.v1.json](../schemas/events/orchestration.RunFailed.v1.json) |
+| `orchestration.MessageRefused` | 1 | A `steer` or `answer` message for a task that cannot take it, with the reason. | [events/orchestration.MessageRefused.v1.json](../schemas/events/orchestration.MessageRefused.v1.json) |
+| `conversation.ConversationStarted` | 1 | A new chat thread. | [events/conversation.ConversationStarted.v1.json](../schemas/events/conversation.ConversationStarted.v1.json) |
+| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
+| `conversation.AgentReplyPosted` | 1 | An agent reply in a thread, made from the orchestration event `sourceEventId`. | [events/conversation.AgentReplyPosted.v1.json](../schemas/events/conversation.AgentReplyPosted.v1.json) |
+| `prompts.PromptCreated` | 1 | A new prompt. | [events/prompts.PromptCreated.v1.json](../schemas/events/prompts.PromptCreated.v1.json) |
+| `prompts.PromptVersionPublished` | 1 | A new immutable version of a prompt, with its variables. | [events/prompts.PromptVersionPublished.v1.json](../schemas/events/prompts.PromptVersionPublished.v1.json) |
+| `llm.CallStarted` | 1 | One attempt of a call starts on one model, with its own reservation. | [events/llm.CallStarted.v1.json](../schemas/events/llm.CallStarted.v1.json) |
+| `llm.CallCompleted` | 1 | The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response. | [events/llm.CallCompleted.v1.json](../schemas/events/llm.CallCompleted.v1.json) |
+| `llm.CallFailed` | 1 | One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. | [events/llm.CallFailed.v1.json](../schemas/events/llm.CallFailed.v1.json) |
+| `budget.BudgetSet` | 1 | A cap for a scope: a hard amount and an optional soft amount. | [events/budget.BudgetSet.v1.json](../schemas/events/budget.BudgetSet.v1.json) |
+| `budget.FundsReserved` | 1 | Money is held for a call. Answer to `rpc.budget.reserve`. | [events/budget.FundsReserved.v1.json](../schemas/events/budget.FundsReserved.v1.json) |
+| `budget.ReservationRefused` | 1 | A scope has no room for the call. Answer to `rpc.budget.reserve`. | [events/budget.ReservationRefused.v1.json](../schemas/events/budget.ReservationRefused.v1.json) |
+| `budget.ReservationSettled` | 1 | The real cost is booked and the rest of the hold is free. | [events/budget.ReservationSettled.v1.json](../schemas/events/budget.ReservationSettled.v1.json) |
+| `budget.ReservationExpired` | 1 | No settle came in time. The full reserved amount is booked as spent. | [events/budget.ReservationExpired.v1.json](../schemas/events/budget.ReservationExpired.v1.json) |
+| `budget.ThresholdCrossed` | 1 | Spend went over 50, 80 or 100% of a soft or hard cap. | [events/budget.ThresholdCrossed.v1.json](../schemas/events/budget.ThresholdCrossed.v1.json) |
+| `agents.AgentCreated` | 1 | A new agent. | [events/agents.AgentCreated.v1.json](../schemas/events/agents.AgentCreated.v1.json) |
+| `agents.AgentVersionPublished` | 1 | A new immutable version of an agent: prompt version, models (default first, then the fallback chain), limits. | [events/agents.AgentVersionPublished.v1.json](../schemas/events/agents.AgentVersionPublished.v1.json) |
+| `agents.AgentVersionActivated` | 1 | New runs use this version. A rollback is an activation of an older version. | [events/agents.AgentVersionActivated.v1.json](../schemas/events/agents.AgentVersionActivated.v1.json) |
+| `agents.AgentEnabled` | 1 | The agent is on. Plans can use it. | [events/agents.AgentEnabled.v1.json](../schemas/events/agents.AgentEnabled.v1.json) |
+| `agents.AgentDisabled` | 1 | The agent is off. No new plan uses it. | [events/agents.AgentDisabled.v1.json](../schemas/events/agents.AgentDisabled.v1.json) |
 
 ## orchestration.TaskSubmitted v1
 
-The owner sent a task.
+The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `taskId` | string (uuid) | yes |
 | `text` | string | yes |
 | `mode` | `"auto"` \| `"approval"` | yes |
+| `conversationId` | string (uuid) | no |
+| `messageId` | string (uuid) | no |
+
+## orchestration.RunStarted v1
+
+Execution of the approved plan starts.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+
+## orchestration.RunCompleted v1
+
+The run ended with a result summary and its total cost.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `summary` | string | yes |
+| `costMicroUsd` | integer | yes |
+
+## orchestration.RunFailed v1
+
+The run ended with no result, with a code and a plain reason.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `code` | `"validation_failed"` \| `"not_found"` \| `"conflict"` \| `"unauthorized"` \| `"forbidden"` \| `"rate_limited"` \| `"internal"` \| `"unavailable"` \| `"budget_refused"` \| `"method_not_allowed"` \| `"payload_too_large"` \| `"unsupported_media_type"` | yes |
+| `reason` | string | yes |
+
+## orchestration.MessageRefused v1
+
+A `steer` or `answer` message for a task that cannot take it, with the reason.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `conversationId` | string (uuid) | yes |
+| `messageId` | string (uuid) | yes |
+| `intent` | `"steer"` \| `"answer"` | yes |
+| `reason` | string | yes |
+
+## conversation.ConversationStarted v1
+
+A new chat thread.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `conversationId` | string (uuid) | yes |
+
+## conversation.OwnerMessagePosted v1
+
+The owner posted a message in a thread. `taskId` is present for `steer` and `answer`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `conversationId` | string (uuid) | yes |
+| `messageId` | string (uuid) | yes |
+| `text` | string | yes |
+| `intent` | `"new_task"` \| `"steer"` \| `"answer"` | yes |
+| `taskId` | string (uuid) | no |
+
+## conversation.AgentReplyPosted v1
+
+An agent reply in a thread, made from the orchestration event `sourceEventId`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `conversationId` | string (uuid) | yes |
+| `messageId` | string (uuid) | yes |
+| `text` | string | yes |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | no |
+| `sourceEventId` | string (uuid) | yes |
+
+## prompts.PromptCreated v1
+
+A new prompt.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `promptId` | string (uuid) | yes |
+| `name` | string | yes |
+
+## prompts.PromptVersionPublished v1
+
+A new immutable version of a prompt, with its variables.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `promptId` | string (uuid) | yes |
+| `text` | string | yes |
+| `variables` | array | yes |
+| `version` | integer | yes |
+
+## llm.CallStarted v1
+
+One attempt of a call starts on one model, with its own reservation.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `callId` | string (uuid) | yes |
+| `attempt` | integer | yes |
+| `model` | string | yes |
+| `agent` | object | yes |
+| `reservationId` | string (uuid) | yes |
+
+## llm.CallCompleted v1
+
+The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `callId` | string (uuid) | yes |
+| `attempt` | integer | yes |
+| `model` | string | yes |
+| `text` | string | yes |
+| `finishReason` | `"stop"` \| `"length"` \| `"tool_calls"` \| `"content_filter"` | yes |
+| `inputTokens` | integer | yes |
+| `outputTokens` | integer | yes |
+| `cachedTokens` | integer | yes |
+| `costMicroUsd` | integer | yes |
+| `latencyMs` | integer | yes |
+| `bodyId` | string (uuid) | yes |
+
+## llm.CallFailed v1
+
+One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `callId` | string (uuid) | yes |
+| `attempt` | integer | yes |
+| `model` | string | yes |
+| `errorClass` | `"rate_limit"` \| `"timeout"` \| `"provider"` \| `"invalid"` | yes |
+| `reason` | string | yes |
+| `costMicroUsd` | integer | yes |
+| `nextModel` | string | no |
+
+## budget.BudgetSet v1
+
+A cap for a scope: a hard amount and an optional soft amount.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `scope` | object | yes |
+| `hardCapMicroUsd` | integer | yes |
+| `softCapMicroUsd` | integer | no |
+
+## budget.FundsReserved v1
+
+Money is held for a call. Answer to `rpc.budget.reserve`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `reservationId` | string (uuid) | yes |
+| `callId` | string (uuid) | yes |
+| `scopes` | array | yes |
+| `amountMicroUsd` | integer | yes |
+| `expiresAt` | string (date-time) | yes |
+
+## budget.ReservationRefused v1
+
+A scope has no room for the call. Answer to `rpc.budget.reserve`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `reservationId` | string (uuid) | yes |
+| `callId` | string (uuid) | yes |
+| `scope` | object | yes |
+| `amountMicroUsd` | integer | yes |
+| `reason` | string | yes |
+
+## budget.ReservationSettled v1
+
+The real cost is booked and the rest of the hold is free.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `reservationId` | string (uuid) | yes |
+| `reservedMicroUsd` | integer | yes |
+| `actualMicroUsd` | integer | yes |
+
+## budget.ReservationExpired v1
+
+No settle came in time. The full reserved amount is booked as spent.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `reservationId` | string (uuid) | yes |
+| `amountMicroUsd` | integer | yes |
+
+## budget.ThresholdCrossed v1
+
+Spend went over 50, 80 or 100% of a soft or hard cap.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `scope` | object | yes |
+| `cap` | `"soft"` \| `"hard"` | yes |
+| `percent` | `50` \| `80` \| `100` | yes |
+| `spentMicroUsd` | integer | yes |
+| `capMicroUsd` | integer | yes |
+
+## agents.AgentCreated v1
+
+A new agent.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `agentId` | string (uuid) | yes |
+| `name` | string | yes |
+
+## agents.AgentVersionPublished v1
+
+A new immutable version of an agent: prompt version, models (default first, then the fallback chain), limits.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `agentId` | string (uuid) | yes |
+| `prompt` | object | yes |
+| `models` | array | yes |
+| `limits` | object | yes |
+| `version` | integer | yes |
+
+## agents.AgentVersionActivated v1
+
+New runs use this version. A rollback is an activation of an older version.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `agentId` | string (uuid) | yes |
+| `version` | integer | yes |
+
+## agents.AgentEnabled v1
+
+The agent is on. Plans can use it.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `agentId` | string (uuid) | yes |
+
+## agents.AgentDisabled v1
+
+The agent is off. No new plan uses it.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `agentId` | string (uuid) | yes |

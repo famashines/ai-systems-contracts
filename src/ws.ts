@@ -18,8 +18,18 @@ export const WsLimits = {
 export const Topic = z.union([
   z.enum(["tasks", "budget", "agents", "notifications"]),
   z.templateLiteral(["task:", Id]),
+  z.templateLiteral(["conversation:", Id]),
 ]);
 export type Topic = z.infer<typeof Topic>;
+
+export const DeltaV1 = z.object({
+  i: z.int().nonnegative(),
+  text: z.string().max(16384),
+});
+export type DeltaV1 = z.infer<typeof DeltaV1>;
+
+export const deltaSubject = (taskId: Id, callId: Id) =>
+  `delta.${taskId}.${callId}` as const;
 
 const Seq = z.int().nonnegative();
 const Token = z.string().min(1).max(8192);
@@ -48,6 +58,7 @@ export const ServerMessageV1 = z.discriminatedUnion("type", [
     heartbeatMs: z.int().positive(),
   }),
   z.object({ type: z.literal("subscribed"), topics: Topics, fromSeq: Seq }),
+  z.object({ type: z.literal("unsubscribed"), topics: Topics }),
   z.object({
     type: z.literal("notice"),
     seq: z.int().positive(),
@@ -61,12 +72,11 @@ export const ServerMessageV1 = z.discriminatedUnion("type", [
     type: z.literal("delta"),
     taskId: Id,
     callId: Id,
-    i: z.int().nonnegative(),
-    text: z.string().max(16384),
+    ...DeltaV1.shape,
   }),
   z.object({
     type: z.literal("resync"),
-    reason: z.enum(["too_old", "server_restart"]),
+    reason: z.enum(["too_old"]),
   }),
   z.object({
     type: z.literal("error"),

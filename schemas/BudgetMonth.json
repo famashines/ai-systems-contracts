@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "maxLength": 7,
+  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+}

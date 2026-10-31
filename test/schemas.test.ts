@@ -2,7 +2,50 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { z } from "zod";
 import {
+  ActivateAgentVersionCommandPayloadV1,
   Actor,
+  AgentCreatedEventPayloadV1,
+  AgentDisabledEventPayloadV1,
+  AgentLimits,
+  AgentName,
+  AgentReplyPostedEventPayloadV1,
+  AgentVersionPublishedEventPayloadV1,
+  BudgetMonth,
+  BudgetScope,
+  BudgetSetEventPayloadV1,
+  CallCompletedEventPayloadV1,
+  CallFailedEventPayloadV1,
+  CallStartedEventPayloadV1,
+  ConversationStartedEventPayloadV1,
+  CreateAgentCommandPayloadV1,
+  CreatePromptCommandPayloadV1,
+  DeltaV1,
+  deltaSubject,
+  FundsReservedEventPayloadV1,
+  MessageRefusedEventPayloadV1,
+  ModelId,
+  OwnerMessagePostedEventPayloadV1,
+  PostOwnerMessageCommandPayloadV1,
+  PromptCreatedEventPayloadV1,
+  PromptText,
+  PromptVariable,
+  PromptVersionPublishedEventPayloadV1,
+  PublishAgentVersionCommandPayloadV1,
+  PublishPromptVersionCommandPayloadV1,
+  Reason,
+  ReservationExpiredEventPayloadV1,
+  ReservationRefusedEventPayloadV1,
+  ReservationSettledEventPayloadV1,
+  ReserveFundsReplyV1,
+  ReserveFundsRequestV1,
+  RpcSubject,
+  RunCompletedEventPayloadV1,
+  RunFailedEventPayloadV1,
+  RunStartedEventPayloadV1,
+  SetAgentEnabledCommandPayloadV1,
+  SetBudgetCommandPayloadV1,
+  SettleReservationRequestV1,
+  ThresholdCrossedEventPayloadV1,
   MessageType,
   TaskText,
   ClientMessageV1,
@@ -83,6 +126,97 @@ const viewMessage = {
   streamId: `tasks-${id}`,
   actor: { kind: "system", id: "projections" },
   payload: view,
+};
+const without = (value: object, key: string): unknown =>
+  Object.fromEntries(Object.entries(value).filter(([name]) => name !== key));
+const id2 = "5c1e8a7b-2d3f-4e6a-8b9c-0d1e2f3a4b5c";
+const badMoney = [-1, 1.5, "1", null, Number.MAX_SAFE_INTEGER + 1];
+const month = { kind: "month", key: "2026-10" };
+const owned = { conversationId: id, messageId: id2, text: "Hi" };
+const refused = {
+  taskId: id,
+  conversationId: id,
+  messageId: id2,
+  intent: "steer",
+  reason: "The task has ended.",
+};
+const reply = {
+  conversationId: id,
+  messageId: id2,
+  text: "Here is the plan.",
+  taskId: id,
+  runId: id,
+  sourceEventId: id2,
+};
+const promptVersion = {
+  promptId: id,
+  text: "You are {{role}}.",
+  variables: ["role", "taskText"],
+  version: 1,
+};
+const limits = { maxCalls: 10, maxTokens: 4096, maxCostMicroUsd: 50_000 };
+const agentVersion = {
+  agentId: id,
+  prompt: { promptId: id2, version: 1 },
+  models: ["openai/gpt-4o-mini", "meta-llama/llama-3.1-8b-instruct:free"],
+  limits,
+  version: 2,
+};
+const started = {
+  callId: id,
+  attempt: 1,
+  model: "openai/gpt-4o-mini",
+  agent: { agentId: id2, version: 1 },
+  reservationId: id2,
+};
+const completed = {
+  callId: id,
+  attempt: 1,
+  model: "openai/gpt-4o-mini",
+  text: "Hello",
+  finishReason: "stop",
+  inputTokens: 120,
+  outputTokens: 40,
+  cachedTokens: 0,
+  costMicroUsd: 140,
+  latencyMs: 900,
+  bodyId: id2,
+};
+const failed = {
+  callId: id,
+  attempt: 1,
+  model: "openai/gpt-4o-mini",
+  errorClass: "rate_limit",
+  reason: "Rate limit exceeded",
+  costMicroUsd: 0,
+  nextModel: "anthropic/claude-haiku-4.5",
+};
+const reserve = {
+  reservationId: id,
+  callId: id2,
+  scopes: [month, { kind: "task", key: id2 }],
+  worstCaseMicroUsd: 25_000,
+};
+const reserved = {
+  reservationId: id,
+  callId: id2,
+  scopes: [month],
+  amountMicroUsd: 25_000,
+  expiresAt: now,
+};
+const refusal = {
+  reservationId: id,
+  callId: id2,
+  scope: month,
+  amountMicroUsd: 25_000,
+  reason: "Monthly cap reached: 19.80 of 20.00 USD",
+};
+const threshold = {
+  scope: month,
+  cap: "hard",
+  percent: 80,
+  spentMicroUsd: 16_000_000,
+  capMicroUsd: 20_000_000,
 };
 const errorCodes = [
   "validation_failed",
@@ -234,8 +368,23 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "Topic",
     Topic,
-    ["tasks", "budget", "agents", "notifications", `task:${id}`],
-    ["task", "task:1", "chat", `task:${upperId}`, `conversation:${id}`],
+    [
+      "tasks",
+      "budget",
+      "agents",
+      "notifications",
+      `task:${id}`,
+      `conversation:${id}`,
+    ],
+    [
+      "task",
+      "task:1",
+      "chat",
+      `task:${upperId}`,
+      `conversation:${upperId}`,
+      "conversation:",
+      `conversations:${id}`,
+    ],
   ],
   [
     "ViewSubject",
@@ -246,9 +395,10 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       "view.agents",
       "view.notifications",
       `view.task.${id}`,
+      `view.conversation.${id}`,
     ],
     [
-      `view.conversation.${id}`,
+      `view.conversation.${upperId}`,
       "tasks",
       "view.task",
       `view.task:${id}`,
@@ -326,8 +476,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       notice,
       { ...notice, commandId: id },
       { type: "delta", taskId: id, callId: id, i: 0, text: "Hel" },
+      { type: "unsubscribed", topics: ["budget", `conversation:${id}`] },
       { type: "resync", reason: "too_old" },
-      { type: "resync", reason: "server_restart" },
       { type: "error", code: "forbidden", message: "Topic is not allowed" },
       { type: "ping", t: 1 },
       { type: "pong", t: 1 },
@@ -338,6 +488,11 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...notice, commandId: "x" },
       { ...notice, docId: "a".repeat(201) },
       { type: "resync", reason: "later" },
+      { type: "resync", reason: "server_restart" },
+      { type: "unsubscribed", topics: [] },
+      { type: "unsubscribed", topics: ["chat"] },
+      { type: "delta", taskId: id, callId: id, i: 1.5, text: "x" },
+      { type: "delta", taskId: upperId, callId: id, i: 0, text: "x" },
       { type: "error", code: "oops", message: "x" },
       { type: "error", code: "internal", message: "x".repeat(1001) },
       { type: "delta", taskId: id, callId: id, i: -1, text: "x" },
@@ -345,6 +500,457 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     ],
   ],
   ["ErrorCode", ErrorCode, errorCodes, ["teapot"]],
+  ["Reason", Reason, ["x", "x".repeat(1000)], ["", "x".repeat(1001), 1]],
+  [
+    "ModelId",
+    ModelId,
+    [
+      "openai/gpt-4o",
+      "anthropic/claude-sonnet-4.5",
+      "meta-llama/llama-3.1-8b-instruct:free",
+      "openrouter/auto",
+    ],
+    [
+      "gpt-4o",
+      "/gpt",
+      "openai/",
+      "a/b/c",
+      "openai/gpt 4o",
+      `a/${"b".repeat(199)}`,
+    ],
+  ],
+  [
+    "DeltaV1",
+    DeltaV1,
+    [
+      { i: 0, text: "" },
+      { i: 7, text: "x".repeat(16384) },
+    ],
+    [
+      { i: -1, text: "x" },
+      { i: 1.5, text: "x" },
+      { i: "0", text: "x" },
+      { i: 0, text: "x".repeat(16385) },
+      { i: 0 },
+      { text: "x" },
+    ],
+  ],
+  [
+    "PostOwnerMessageCommandPayloadV1",
+    PostOwnerMessageCommandPayloadV1,
+    [
+      { conversationId: id, text: "Hi" },
+      { conversationId: id, text: "Go on", taskId: id2 },
+      { conversationId: id, text: "New one", newTask: true },
+    ],
+    [
+      { text: "Hi" },
+      { conversationId: upperId, text: "Hi" },
+      { conversationId: id, text: " " },
+      { conversationId: id, text: "x".repeat(20001) },
+      { conversationId: id, text: "Hi", taskId: "x" },
+      { conversationId: id, text: "Hi", newTask: "yes" },
+    ],
+  ],
+  [
+    "ConversationStartedEventPayloadV1",
+    ConversationStartedEventPayloadV1,
+    [{ conversationId: id }],
+    [{}, { conversationId: upperId }],
+  ],
+  [
+    "OwnerMessagePostedEventPayloadV1",
+    OwnerMessagePostedEventPayloadV1,
+    [
+      { ...owned, intent: "new_task" },
+      { ...owned, intent: "steer", taskId: id },
+      { ...owned, intent: "answer", taskId: id },
+    ],
+    [
+      { ...owned, intent: "steer" },
+      { ...owned, intent: "answer" },
+      { ...owned, intent: "chat", taskId: id },
+      { ...owned, intent: "steer", taskId: "x" },
+      { ...owned, intent: "new_task", text: "" },
+      { conversationId: id, text: "Hi", intent: "new_task" },
+    ],
+  ],
+  [
+    "AgentReplyPostedEventPayloadV1",
+    AgentReplyPostedEventPayloadV1,
+    [reply, without(reply, "runId")],
+    [
+      { ...reply, sourceEventId: "x" },
+      { ...reply, text: "" },
+      { ...reply, taskId: undefined },
+    ],
+  ],
+  [
+    "RunStartedEventPayloadV1",
+    RunStartedEventPayloadV1,
+    [{ taskId: id, runId: id2 }],
+    [{ taskId: id }, { taskId: id, runId: upperId }],
+  ],
+  [
+    "RunCompletedEventPayloadV1",
+    RunCompletedEventPayloadV1,
+    [{ taskId: id, runId: id2, summary: "Done", costMicroUsd: 0 }],
+    [
+      ...badMoney.map((costMicroUsd) => ({
+        taskId: id,
+        runId: id2,
+        summary: "Done",
+        costMicroUsd,
+      })),
+      { taskId: id, runId: id2, summary: "", costMicroUsd: 1 },
+      { taskId: id, runId: id2, summary: "Done" },
+    ],
+  ],
+  [
+    "RunFailedEventPayloadV1",
+    RunFailedEventPayloadV1,
+    [{ taskId: id, runId: id2, code: "budget_refused", reason: "Cap reached" }],
+    [
+      { taskId: id, runId: id2, code: "oops", reason: "x" },
+      { taskId: id, runId: id2, code: "internal", reason: "" },
+      { taskId: id, runId: id2, code: "internal" },
+    ],
+  ],
+  [
+    "MessageRefusedEventPayloadV1",
+    MessageRefusedEventPayloadV1,
+    [refused, { ...refused, intent: "answer" }],
+    [
+      { ...refused, intent: "new_task" },
+      { ...refused, reason: "" },
+      { ...refused, messageId: "x" },
+    ],
+  ],
+  [
+    "TaskSubmittedEventPayloadV1 from the chat",
+    TaskSubmittedEventPayloadV1,
+    [{ ...event.payload, conversationId: id, messageId: id2 }],
+    [
+      { ...event.payload, conversationId: "x" },
+      { ...event.payload, messageId: upperId },
+    ],
+  ],
+  [
+    "PromptText",
+    PromptText,
+    ["x", "x".repeat(100000)],
+    ["", " \n", "a\0b", "x".repeat(100001)],
+  ],
+  [
+    "PromptVariable",
+    PromptVariable,
+    ["role", "taskText", "a_1"],
+    ["", "Role", "1a", "a-b", "{{a}}", "a".repeat(65)],
+  ],
+  [
+    "CreatePromptCommandPayloadV1",
+    CreatePromptCommandPayloadV1,
+    [{ name: "Writer system prompt" }],
+    [{ name: "" }, { name: "x".repeat(201) }, {}],
+  ],
+  [
+    "PublishPromptVersionCommandPayloadV1",
+    PublishPromptVersionCommandPayloadV1,
+    [{ promptId: id, text: "Hi", variables: [] }],
+    [
+      { promptId: id, text: "Hi" },
+      { promptId: id, text: "Hi", variables: ["Bad"] },
+      {
+        promptId: id,
+        text: "Hi",
+        variables: Array.from({ length: 51 }, () => "a"),
+      },
+    ],
+  ],
+  [
+    "PromptCreatedEventPayloadV1",
+    PromptCreatedEventPayloadV1,
+    [{ promptId: id, name: "Writer" }],
+    [{ promptId: "x", name: "Writer" }, { promptId: id }],
+  ],
+  [
+    "PromptVersionPublishedEventPayloadV1",
+    PromptVersionPublishedEventPayloadV1,
+    [promptVersion],
+    [
+      { ...promptVersion, version: 0 },
+      { ...promptVersion, version: 1.5 },
+      { ...promptVersion, text: "" },
+      { ...promptVersion, version: undefined },
+    ],
+  ],
+  [
+    "AgentName",
+    AgentName,
+    ["orchestrator", "writer", "code-reviewer-2"],
+    ["", "Writer", "2nd", "a_b", "a b", "a".repeat(65)],
+  ],
+  [
+    "AgentLimits",
+    AgentLimits,
+    [limits, { maxCalls: 1000, maxTokens: 16384, maxCostMicroUsd: 0 }],
+    [
+      ...badMoney.map((maxCostMicroUsd) => ({ ...limits, maxCostMicroUsd })),
+      { ...limits, maxCalls: 0 },
+      { ...limits, maxCalls: 1001 },
+      { ...limits, maxTokens: 0 },
+      { ...limits, maxTokens: 16385 },
+    ],
+  ],
+  [
+    "CreateAgentCommandPayloadV1",
+    CreateAgentCommandPayloadV1,
+    [{ name: "writer" }],
+    [{ name: "Writer" }, {}],
+  ],
+  [
+    "PublishAgentVersionCommandPayloadV1",
+    PublishAgentVersionCommandPayloadV1,
+    [without(agentVersion, "version")],
+    [
+      { ...agentVersion, models: [] },
+      {
+        ...agentVersion,
+        models: Array.from({ length: 6 }, () => "openai/gpt-4o"),
+      },
+      { ...agentVersion, models: ["gpt-4o"] },
+      { ...agentVersion, prompt: { promptId: id2 } },
+      { ...agentVersion, prompt: { promptId: id2, version: 0 } },
+      { ...agentVersion, limits: undefined },
+    ],
+  ],
+  [
+    "AgentVersionPublishedEventPayloadV1",
+    AgentVersionPublishedEventPayloadV1,
+    [agentVersion],
+    [
+      { ...agentVersion, version: 0 },
+      { ...agentVersion, agentId: upperId },
+    ],
+  ],
+  [
+    "ActivateAgentVersionCommandPayloadV1",
+    ActivateAgentVersionCommandPayloadV1,
+    [{ agentId: id, version: 1 }],
+    [{ agentId: id }, { agentId: id, version: 0 }],
+  ],
+  [
+    "SetAgentEnabledCommandPayloadV1",
+    SetAgentEnabledCommandPayloadV1,
+    [
+      { agentId: id, enabled: true },
+      { agentId: id, enabled: false },
+    ],
+    [{ agentId: id }, { agentId: id, enabled: "true" }],
+  ],
+  [
+    "AgentCreatedEventPayloadV1",
+    AgentCreatedEventPayloadV1,
+    [{ agentId: id, name: "writer" }],
+    [{ agentId: id, name: "" }],
+  ],
+  [
+    "AgentDisabledEventPayloadV1",
+    AgentDisabledEventPayloadV1,
+    [{ agentId: id }],
+    [{}, { agentId: "x" }],
+  ],
+  [
+    "CallStartedEventPayloadV1",
+    CallStartedEventPayloadV1,
+    [started, { ...started, attempt: 2 }],
+    [
+      { ...started, attempt: 0 },
+      { ...started, model: "gpt" },
+      { ...started, reservationId: "x" },
+      { ...started, agent: { agentId: id2 } },
+    ],
+  ],
+  [
+    "CallCompletedEventPayloadV1",
+    CallCompletedEventPayloadV1,
+    [
+      completed,
+      { ...completed, text: "", finishReason: "length", costMicroUsd: 0 },
+      { ...completed, text: "x".repeat(100000) },
+    ],
+    [
+      ...badMoney.map((costMicroUsd) => ({ ...completed, costMicroUsd })),
+      { ...completed, text: "x".repeat(100001) },
+      { ...completed, finishReason: "error" },
+      { ...completed, inputTokens: -1 },
+      { ...completed, outputTokens: 1.5 },
+      { ...completed, cachedTokens: undefined },
+      { ...completed, latencyMs: -1 },
+      { ...completed, bodyId: upperId },
+    ],
+  ],
+  [
+    "CallFailedEventPayloadV1",
+    CallFailedEventPayloadV1,
+    [failed, without({ ...failed, errorClass: "invalid" }, "nextModel")],
+    [
+      ...badMoney.map((costMicroUsd) => ({ ...failed, costMicroUsd })),
+      { ...failed, errorClass: "auth" },
+      { ...failed, reason: "" },
+      { ...failed, nextModel: "x" },
+    ],
+  ],
+  [
+    "BudgetMonth",
+    BudgetMonth,
+    ["2026-10", "2027-01", "2026-12"],
+    ["2026-13", "2026-00", "2026-1", "26-10", "2026-10-01", "2026/10"],
+  ],
+  [
+    "BudgetScope",
+    BudgetScope,
+    [
+      month,
+      { kind: "task", key: id },
+      { kind: "agent", key: id },
+      { kind: "project", key: id },
+    ],
+    [
+      { kind: "month", key: id },
+      { kind: "task", key: "2026-10" },
+      { kind: "year", key: "2026" },
+      { kind: "task", key: upperId },
+      { kind: "month" },
+    ],
+  ],
+  [
+    "SetBudgetCommandPayloadV1",
+    SetBudgetCommandPayloadV1,
+    [
+      { scope: month, hardCapMicroUsd: 20_000_000 },
+      { scope: month, hardCapMicroUsd: 0, softCapMicroUsd: 0 },
+    ],
+    [
+      ...badMoney.map((hardCapMicroUsd) => ({ scope: month, hardCapMicroUsd })),
+      ...badMoney.map((softCapMicroUsd) => ({
+        scope: month,
+        hardCapMicroUsd: 1,
+        softCapMicroUsd,
+      })),
+      { hardCapMicroUsd: 1 },
+    ],
+  ],
+  [
+    "BudgetSetEventPayloadV1",
+    BudgetSetEventPayloadV1,
+    [{ scope: month, hardCapMicroUsd: 20_000_000, softCapMicroUsd: 10 }],
+    [{ scope: month, hardCapMicroUsd: 0.01 }],
+  ],
+  [
+    "ReserveFundsRequestV1",
+    ReserveFundsRequestV1,
+    [
+      reserve,
+      { ...reserve, worstCaseMicroUsd: 0, maxDurationMs: 3600000 },
+      { ...reserve, maxDurationMs: 1000 },
+    ],
+    [
+      ...badMoney.map((worstCaseMicroUsd) => ({
+        ...reserve,
+        worstCaseMicroUsd,
+      })),
+      { ...reserve, scopes: [] },
+      { ...reserve, scopes: Array.from({ length: 5 }, () => month) },
+      { ...reserve, maxDurationMs: 999 },
+      { ...reserve, maxDurationMs: 3600001 },
+      { ...reserve, reservationId: upperId },
+      { ...reserve, callId: undefined },
+    ],
+  ],
+  [
+    "ReserveFundsReplyV1",
+    ReserveFundsReplyV1,
+    [
+      { ok: true, reservationId: id, expiresAt: now },
+      { ok: false, reservationId: id, scope: month, reason: "Cap reached" },
+    ],
+    [
+      { ok: true, reservationId: id },
+      { ok: false, reservationId: id, scope: month },
+      { ok: "true", reservationId: id, expiresAt: now },
+      { ok: true, reservationId: "x", expiresAt: now },
+    ],
+  ],
+  [
+    "SettleReservationRequestV1",
+    SettleReservationRequestV1,
+    [
+      { reservationId: id, actualMicroUsd: 0 },
+      { reservationId: id, actualMicroUsd: 1_500_000 },
+    ],
+    [
+      ...badMoney.map((actualMicroUsd) => ({
+        reservationId: id,
+        actualMicroUsd,
+      })),
+      { actualMicroUsd: 1 },
+    ],
+  ],
+  [
+    "FundsReservedEventPayloadV1",
+    FundsReservedEventPayloadV1,
+    [reserved],
+    [
+      ...badMoney.map((amountMicroUsd) => ({ ...reserved, amountMicroUsd })),
+      { ...reserved, scopes: [] },
+      { ...reserved, expiresAt: "soon" },
+    ],
+  ],
+  [
+    "ReservationRefusedEventPayloadV1",
+    ReservationRefusedEventPayloadV1,
+    [refusal],
+    [
+      { ...refusal, reason: "" },
+      { ...refusal, scope: { kind: "month", key: "2026-13" } },
+      { ...refusal, amountMicroUsd: -5 },
+    ],
+  ],
+  [
+    "ReservationSettledEventPayloadV1",
+    ReservationSettledEventPayloadV1,
+    [
+      { reservationId: id, reservedMicroUsd: 25_000, actualMicroUsd: 140 },
+      { reservationId: id, reservedMicroUsd: 100, actualMicroUsd: 102 },
+    ],
+    badMoney.map((actualMicroUsd) => ({
+      reservationId: id,
+      reservedMicroUsd: 1,
+      actualMicroUsd,
+    })),
+  ],
+  [
+    "ReservationExpiredEventPayloadV1",
+    ReservationExpiredEventPayloadV1,
+    [{ reservationId: id, amountMicroUsd: 25_000 }],
+    badMoney.map((amountMicroUsd) => ({ reservationId: id, amountMicroUsd })),
+  ],
+  [
+    "ThresholdCrossedEventPayloadV1",
+    ThresholdCrossedEventPayloadV1,
+    [
+      threshold,
+      { ...threshold, cap: "soft", percent: 50 },
+      { ...threshold, percent: 100 },
+    ],
+    [
+      { ...threshold, percent: 90 },
+      { ...threshold, percent: "80" },
+      { ...threshold, cap: "medium" },
+      ...badMoney.map((spentMicroUsd) => ({ ...threshold, spentMicroUsd })),
+    ],
+  ],
   [
     "ProblemJson",
     ProblemJson,
@@ -493,6 +1099,11 @@ test("long untrusted strings are checked in linear time", () => {
     [Id, "0".repeat(200000)],
     [Topic, "task:" + "0".repeat(200000)],
     [ViewSubject, "view.task." + "0".repeat(200000)],
+    [PromptText, "a".repeat(200000) + "\0"],
+    [PromptVariable, "a".repeat(200000) + "!"],
+    [ModelId, "a".repeat(200000)],
+    [AgentName, "a".repeat(200000) + "!"],
+    [BudgetMonth, "2".repeat(200000)],
   ];
   for (const [schema, value] of inputs) {
     const start = performance.now();
@@ -512,6 +1123,7 @@ test("viewSubject and topicFromSubject map each topic form both ways", () => {
     ["agents", "view.agents"],
     ["notifications", "view.notifications"],
     [`task:${id}`, `view.task.${id}`],
+    [`conversation:${id}`, `view.conversation.${id}`],
   ];
   for (const [topic, subject] of pairs) {
     assert.equal(viewSubject(topic), subject);
@@ -525,7 +1137,7 @@ test("topicFromSubject refuses a subject that is not a view subject", () => {
     "view.",
     "view.chat",
     `view.task.${id}.x`,
-    `view.conversation.${id}`,
+    `view.conversation.${id}.x`,
   ]) {
     assert.throws(() => topicFromSubject(subject), z.ZodError, subject);
   }
@@ -548,4 +1160,45 @@ test("ViewMessageV1 refuses a type that is not the subject of the topic", () => 
     }).success,
     false,
   );
+});
+
+test("PostOwnerMessage newTask is false by default", () => {
+  assert.equal(
+    PostOwnerMessageCommandPayloadV1.parse({ conversationId: id, text: "Hi" })
+      .newTask,
+    false,
+  );
+});
+
+test("a reservation holds for 10 minutes by default", () => {
+  assert.equal(ReserveFundsRequestV1.parse(reserve).maxDurationMs, 600000);
+});
+
+test("deltaSubject gives delta.<taskId>.<callId>", () => {
+  assert.equal(deltaSubject(id, id2), `delta.${id}.${id2}`);
+});
+
+test("rpc subjects start with rpc. so that no stream takes them", () => {
+  assert.deepEqual(RpcSubject, {
+    budgetReserve: "rpc.budget.reserve",
+    budgetSettle: "rpc.budget.settle",
+  });
+});
+
+test("the delta of a server message has the same rules as the core NATS body", () => {
+  for (const body of [
+    { i: 0, text: "x" },
+    { i: -1, text: "x" },
+    { i: 0, text: "x".repeat(16385) },
+  ])
+    assert.equal(
+      ServerMessageV1.safeParse({
+        type: "delta",
+        taskId: id,
+        callId: id2,
+        ...body,
+      }).success,
+      DeltaV1.safeParse(body).success,
+      JSON.stringify(body),
+    );
 });

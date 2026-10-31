@@ -6,6 +6,7 @@ import { Topic } from "./ws.ts";
 export const ViewSubject = z.union([
   z.enum(["view.tasks", "view.budget", "view.agents", "view.notifications"]),
   z.templateLiteral(["view.task.", Id]),
+  z.templateLiteral(["view.conversation.", Id]),
 ]);
 export type ViewSubject = z.infer<typeof ViewSubject>;
 

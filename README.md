@@ -18,15 +18,20 @@ const event = parseEvent(message);
 
 ## Content
 
-| File                   | Content                                                                             |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`          |
-| `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                            |
-| `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted` event, task list result, `TaskStatus`         |
-| `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`          |
-| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`   |
-| `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10) |
-| `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                            |
+| File                   | Content                                                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`, `Reason`, `ModelId`                                              |
+| `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                                                                                     |
+| `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted`, `RunStarted`, `RunCompleted`, `RunFailed`, `MessageRefused`, task list result, `TaskStatus`           |
+| `src/conversation.ts`  | `PostOwnerMessage` command, `ConversationStarted`, `OwnerMessagePosted`, `AgentReplyPosted`                                                  |
+| `src/prompts.ts`       | `CreatePrompt` and `PublishPromptVersion` commands, `PromptCreated`, `PromptVersionPublished`, `PromptRef`                                   |
+| `src/agents.ts`        | agent commands, `AgentCreated`, `AgentVersionPublished`, `AgentVersionActivated`, `AgentEnabled`, `AgentDisabled`, `AgentRef`, `AgentLimits` |
+| `src/llm.ts`           | `CallStarted`, `CallCompleted`, `CallFailed`, `LlmErrorClass`, `FinishReason`                                                                |
+| `src/budget.ts`        | `SetBudget` command, `budget.*` events, `BudgetScope`, rpc reserve and settle messages, `RpcSubject`                                         |
+| `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`                                                                   |
+| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`                                                            |
+| `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10), `DeltaV1`, `deltaSubject`                               |
+| `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                                                                                     |
 
 Generated output: `schemas/` (JSON Schema of each exported schema and of
 each event version) and `docs/events.md` (event reference). Do not edit
@@ -74,6 +79,28 @@ new approval.
   together, not for each message.
 - Ids are lower-case UUID v4 (ADR 0022). Make them with
   `crypto.randomUUID()`.
+- Money is an integer number of micro-USD (`MicroUsd`, 1 USD =
+  1,000,000). Convert a provider cost in USD with
+  `Math.round(usd * 1_000_000)`. No schema has a float for money.
+
+## Budget rpc
+
+Core NATS request-reply, not in a stream (ADR 0015, ADR 0021). The caller
+makes `reservationId`, so a repeated request after a timeout does not
+hold the money two times. A refusal is a normal reply with `ok: false`.
+Errors come in the `error-code` header of `kit/messaging`.
+
+| Subject              | Request                      | Reply                      |
+| -------------------- | ---------------------------- | -------------------------- |
+| `rpc.budget.reserve` | `ReserveFundsRequestV1`      | `ReserveFundsReplyV1`      |
+| `rpc.budget.settle`  | `SettleReservationRequestV1` | `SettleReservationReplyV1` |
+
+## Deltas
+
+ai-proxy publishes each token delta to core NATS (ADR 0019) on
+`deltaSubject(taskId, callId)` (`delta.<taskId>.<callId>`) with a
+`DeltaV1` body `{ i, text }`. socket-gateway adds `type`, `taskId` and
+`callId` and sends a `delta` server message with the same rules.
 
 ## Events
 
@@ -120,13 +147,14 @@ subject is not a `<context>.<EventName>` type. It also checks that `type`
 is the subject of `payload.topic`. The header `Nats-Msg-Id`
 is the `eventId`.
 
-| Topic           | Subject              |
-| --------------- | -------------------- |
-| `tasks`         | `view.tasks`         |
-| `task:<id>`     | `view.task.<id>`     |
-| `budget`        | `view.budget`        |
-| `agents`        | `view.agents`        |
-| `notifications` | `view.notifications` |
+| Topic               | Subject                  |
+| ------------------- | ------------------------ |
+| `tasks`             | `view.tasks`             |
+| `task:<id>`         | `view.task.<id>`         |
+| `conversation:<id>` | `view.conversation.<id>` |
+| `budget`            | `view.budget`            |
+| `agents`            | `view.agents`            |
+| `notifications`     | `view.notifications`     |
 
 `viewSubject(topic)` gives the subject. `topicFromSubject(subject)` gives
 the topic, and throws a `ZodError` for a subject that is not in the table.

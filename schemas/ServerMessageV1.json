@@ -56,6 +56,10 @@
               {
                 "type": "string",
                 "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
               }
             ]
           }
@@ -70,6 +74,45 @@
         "type",
         "topics",
         "fromSeq"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "unsubscribed"
+        },
+        "topics": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "tasks",
+                  "budget",
+                  "agents",
+                  "notifications"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "type",
+        "topics"
       ]
     },
     {
@@ -98,6 +141,10 @@
             {
               "type": "string",
               "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "string",
+              "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
             }
           ]
         },
@@ -172,8 +219,7 @@
         "reason": {
           "type": "string",
           "enum": [
-            "too_old",
-            "server_restart"
+            "too_old"
           ]
         }
       },
