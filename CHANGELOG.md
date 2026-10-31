@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- `ViewNoticeV1`: the notice of a read model change (`topic`, `docId`,
+  `rev`, `data`, optional `commandId`).
+- `ViewMessageV1`: a message on the `VIEWS` stream, the outbox envelope
+  with a `ViewSubject` in `type` and a `ViewNoticeV1` in `payload`. `type`
+  must be the subject of `payload.topic`.
+- `ViewSubject`, `viewSubject(topic)` and `topicFromSubject(subject)`.
+- No released schema changes. The topic `conversation:<id>` comes with
+  M2-02.
+
 ## 0.1.0
 
 - Common schemas: `Id` (lower-case UUID v4), `Timestamp`, `MicroUsd`, `Actor`.
