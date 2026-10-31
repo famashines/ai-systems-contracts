@@ -43,6 +43,9 @@ A service or the app installs a fixed tag, and `zod` as a peer:
 `zod` is a peer dependency (`^4.6.7`), so the service and this package use
 the same zod copy. Two copies break `instanceof` checks and the types.
 
+The package needs Node 22.13 or later. This repo builds and tests on
+Node 26 (`.nvmrc`).
+
 npm downloads the repo at that tag and runs `prepare`, which builds
 `dist/`. `npm ci --ignore-scripts` does not run `prepare`, so it gives no
 `dist/` and the import fails. npm 11 asks each project to approve install

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- `engines.node` is `>=22.13`, so the app (Expo SDK 58, Node 22.13) can
+  install the package with `engine-strict`. The repo still builds and tests
+  on Node 26 (`.nvmrc`). No schema changes.
+
 ## 0.2.0
 
 - `ViewNoticeV1`: the notice of a read model change (`topic`, `docId`,
