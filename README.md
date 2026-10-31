@@ -79,6 +79,11 @@ new approval.
   together, not for each message.
 - Ids are lower-case UUID v4 (ADR 0022). Make them with
   `crypto.randomUUID()`.
+- Size: a NATS message has at most 1 MiB. String limits count
+  characters (code points). The worst case is 6 bytes for each character
+  after JSON escaping (control characters), so a 100,000 character text
+  is at most about 600 KB. The messages of `CallRequested` have their own
+  limit: at most 900,000 bytes as UTF-8 JSON (`JSON.stringify(messages)`).
 - Money is an integer number of micro-USD (`MicroUsd`, 1 USD =
   1,000,000). Convert a provider cost in USD with
   `Math.round(usd * 1_000_000)`. No schema has a float for money.
@@ -95,8 +100,17 @@ ai-proxy, for each attempt (model chain, first model first):
 - ai-proxy reads only `orchestration.CallRequested` from `ORCHESTRATION`
   (ADR 0023). It has the catalog prices, so it reserves and settles each
   attempt itself.
+- ai-proxy makes the `reservationId` of each (`callId`, `attempt`) and
+  stores it before it calls `rpc.budget.reserve`. On a redelivery it uses
+  the same id, so a repeated reserve is idempotent and leaves no orphan
+  reservation.
 - A refused reservation gives `llm.CallFailed` with `errorClass`
-  `budget_refused`.
+  `budget_refused` and the `reservationId` of the refusal.
+- When `CallRequested` has `maxCostMicroUsd` (from `AgentLimits`),
+  ai-proxy refuses an attempt whose worst-case cost is above it, with
+  `llm.CallFailed` `budget_refused`.
+- ai-proxy removes NUL characters from the model output.
+  `CallCompleted.text` refuses NUL.
 - Retryable classes: `rate_limit`, `timeout`, `provider`. Not retryable:
   `invalid`, `budget_refused`.
 - A call that ends with empty output text gives `orchestration.RunFailed`
@@ -133,6 +147,11 @@ come in the `error-code` header of `kit/messaging`.
   (`BudgetMonthV1`) have the key `YYYY-MM`. Other scopes have an id key.
 - Caps are at most 1,000,000,000,000 micro-USD. A soft cap is not above
   the hard cap.
+- `BudgetMonthV1.capMicroUsd` is `null` while no cap is set. Budget
+  refuses every reserve while no cap is set.
+- `remainingMicroUsd` is `max(0, cap - spent - reserved)`, and
+  `overCapMicroUsd` is `max(0, spent - cap)`, so the screen can show spend
+  above the cap. With no cap, both are `0`.
 
 ## Deltas
 

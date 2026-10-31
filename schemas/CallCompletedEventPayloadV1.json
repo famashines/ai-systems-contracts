@@ -24,7 +24,8 @@
     },
     "text": {
       "type": "string",
-      "maxLength": 100000
+      "maxLength": 100000,
+      "pattern": "^[^\\0]*$"
     },
     "finishReason": {
       "type": "string",

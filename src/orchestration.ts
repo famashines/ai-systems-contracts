@@ -137,9 +137,8 @@ export const CallRequestedEventPayloadV1 = z
       .max(50)
       .refine(
         (messages) =>
-          messages.reduce((sum, message) => sum + message.content.length, 0) <=
-          400000,
-        { message: "All messages together have at most 400000 characters" },
+          new TextEncoder().encode(JSON.stringify(messages)).length <= 900000,
+        { message: "All messages together have at most 900000 bytes as JSON" },
       ),
     models: z
       .array(ModelId)
@@ -150,6 +149,7 @@ export const CallRequestedEventPayloadV1 = z
       }),
     maxTokens: z.int().min(1).max(16384),
     maxDurationMs: DurationMs,
+    maxCostMicroUsd: MicroUsd.exactOptional(),
   })
   .describe(
     "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt.",

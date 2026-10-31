@@ -35,6 +35,7 @@ import {
   FundsReservedEventPayloadV1,
   MessageRefusedEventPayloadV1,
   ModelId,
+  OutputText,
   OwnerMessagePostedEventPayloadV1,
   PostOwnerMessageCommandPayloadV1,
   PromptCreatedEventPayloadV1,
@@ -283,7 +284,9 @@ const budgetMonth = {
   spentMicroUsd: 1_500_000,
   reservedMicroUsd: 25_000,
   remainingMicroUsd: 18_475_000,
+  overCapMicroUsd: 0,
   rev: 9,
+  asOf: 12,
 };
 
 const cases: [string, z.ZodType, unknown[], unknown[]][] = [
@@ -866,6 +869,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       ...badMoney.map((costMicroUsd) => ({ ...completed, costMicroUsd })),
       { ...completed, text: "x".repeat(100001) },
+      { ...completed, text: "a\0b" },
       { ...completed, finishReason: "error" },
       { ...completed, inputTokens: -1 },
       { ...completed, outputTokens: 1.5 },
@@ -877,9 +881,22 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "CallFailedEventPayloadV1",
     CallFailedEventPayloadV1,
-    [failed, without({ ...failed, errorClass: "invalid" }, "nextModel")],
+    [
+      failed,
+      without({ ...failed, errorClass: "invalid" }, "nextModel"),
+      {
+        ...failed,
+        errorClass: "budget_refused",
+        reservationId: id,
+        bodyId: id2,
+        inputTokens: 120,
+        outputTokens: 0,
+      },
+    ],
     [
       ...badMoney.map((costMicroUsd) => ({ ...failed, costMicroUsd })),
+      { ...failed, reservationId: "x" },
+      { ...failed, inputTokens: -1 },
       { ...failed, errorClass: "auth" },
       { ...failed, reason: "" },
       { ...failed, nextModel: "x" },
@@ -1010,7 +1027,17 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "BudgetMonthV1",
     BudgetMonthV1,
-    [budgetMonth, { ...budgetMonth, softCapMicroUsd: 10_000_000 }],
+    [
+      budgetMonth,
+      { ...budgetMonth, softCapMicroUsd: 10_000_000 },
+      { ...budgetMonth, capMicroUsd: null, remainingMicroUsd: 0 },
+      {
+        ...budgetMonth,
+        spentMicroUsd: 20_000_140,
+        remainingMicroUsd: 0,
+        overCapMicroUsd: 140,
+      },
+    ],
     [
       ...badMoney.map((spentMicroUsd) => ({ ...budgetMonth, spentMicroUsd })),
       ...badMoney.map((remainingMicroUsd) => ({
@@ -1018,6 +1045,17 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
         remainingMicroUsd,
       })),
       { ...budgetMonth, capMicroUsd: 1_000_000_000_001 },
+      ...badMoney
+        .filter((value) => value !== null)
+        .map((capMicroUsd) => ({ ...budgetMonth, capMicroUsd })),
+      ...badMoney.map((overCapMicroUsd) => ({
+        ...budgetMonth,
+        overCapMicroUsd,
+      })),
+      without(budgetMonth, "capMicroUsd"),
+      without(budgetMonth, "overCapMicroUsd"),
+      without(budgetMonth, "asOf"),
+      { ...budgetMonth, asOf: 0 },
       { ...budgetMonth, month: "2026-13" },
       { ...budgetMonth, rev: -1 },
     ],
@@ -1028,6 +1066,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       requested,
       { ...requested, models: ["openai/gpt-4o"], maxTokens: 16384 },
+      { ...requested, maxCostMicroUsd: 50_000 },
       {
         ...requested,
         messages: [{ role: "assistant", content: "x".repeat(100000) }],
@@ -1053,6 +1092,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...requested, maxTokens: 0 },
       { ...requested, maxTokens: 16385 },
       { ...requested, maxDurationMs: 999 },
+      ...badMoney.map((maxCostMicroUsd) => ({ ...requested, maxCostMicroUsd })),
       { ...requested, agentVersion: 0 },
       { ...requested, taskId: upperId },
       without(requested, "maxDurationMs"),
@@ -1342,6 +1382,8 @@ test("long untrusted strings are checked in linear time", () => {
     [ViewSubject, "view.task." + "0".repeat(200000)],
     [PromptText, "a".repeat(200000) + "\0"],
     [ReplyText, "a".repeat(100000) + "\0"],
+    [OutputText, "a".repeat(99999) + "\0"],
+    [OutputText, "a".repeat(200000) + "\0"],
     [ReplyText, "a".repeat(200000) + "\0"],
     [PromptVariable, "a".repeat(200000) + "!"],
     [ModelId, "a".repeat(200000)],
@@ -1489,26 +1531,104 @@ test("prompt variables and models come once", () => {
   );
 });
 
-test("the messages of a call have at most 400000 characters together", () => {
-  const message = { role: "user", content: "x".repeat(100000) };
-  assert.equal(
-    CallRequestedEventPayloadV1.safeParse({
-      ...requested,
-      messages: Array.from({ length: 4 }, () => message),
-    }).success,
-    true,
-  );
+const jsonBytes = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value)).length;
+
+const messagesAtLimit = (char: string) => {
+  const width = jsonBytes(char) - 2;
+  const full = { role: "user", content: char.repeat(100000) };
+  const count = Math.ceil(900000 / (width * 100000)) - 1;
+  const head = Array.from({ length: count }, () => full);
+  const rest = 900000 - jsonBytes([...head, { role: "user", content: "" }]);
+  return [
+    ...head,
+    {
+      role: "user",
+      content: char.repeat(Math.floor(rest / width)) + "x".repeat(rest % width),
+    },
+  ];
+};
+
+test("the messages of a call have at most 900000 bytes as JSON", () => {
+  for (const char of ["x", "\u4e2d", "\u0001", "\ud83d\ude00", "\ud800"]) {
+    const messages = messagesAtLimit(char);
+    assert.equal(jsonBytes(messages), 900000, JSON.stringify(char));
+    assert.equal(
+      CallRequestedEventPayloadV1.safeParse({ ...requested, messages }).success,
+      true,
+      JSON.stringify(char),
+    );
+    const last = messages.at(-1) ?? { role: "user", content: "" };
+    refusedAt(
+      CallRequestedEventPayloadV1,
+      {
+        ...requested,
+        messages: [
+          ...messages.slice(0, -1),
+          { ...last, content: last.content + "x" },
+        ],
+      },
+      "messages",
+    );
+  }
   refusedAt(
     CallRequestedEventPayloadV1,
     {
       ...requested,
-      messages: [
-        ...Array.from({ length: 4 }, () => message),
-        { role: "user", content: "x" },
-      ],
+      messages: Array.from({ length: 2 }, () => ({
+        role: "user",
+        content: "\u0001".repeat(100000),
+      })),
     },
     "messages",
   );
+});
+
+test("the largest valid events and notices stay under the NATS limit of 1 MiB", () => {
+  const worst = "\u0001".repeat(100000);
+  const events = [
+    {
+      type: "orchestration.CallRequested",
+      payload: { ...requested, messages: messagesAtLimit("\u0001") },
+    },
+    { type: "llm.CallCompleted", payload: { ...completed, text: worst } },
+    {
+      type: "conversation.AgentReplyPosted",
+      payload: { ...reply, text: worst },
+    },
+    {
+      type: "orchestration.RunCompleted",
+      payload: { taskId: id, runId: id2, summary: worst, costMicroUsd: 1 },
+    },
+    {
+      type: "prompts.PromptVersionPublished",
+      payload: { ...promptVersion, text: worst },
+    },
+    {
+      type: "conversation.OwnerMessagePosted",
+      payload: { ...owned, text: worst.slice(0, 20000), intent: "new_task" },
+    },
+  ];
+  for (const sample of events) {
+    const value = { ...event, ...sample };
+    assert.equal(RegisteredEvent.safeParse(value).success, true, sample.type);
+    assert.ok(jsonBytes(value) < 1048576, sample.type);
+  }
+  const notice = {
+    ...viewMessage,
+    type: `view.conversation.${id}`,
+    payload: {
+      ...view,
+      topic: `conversation:${id}`,
+      data: { ...shown, role: "agent", taskId: id2, text: worst },
+    },
+  };
+  assert.equal(ViewMessageV1.safeParse(notice).success, true);
+  assert.equal(
+    NoticeDataV1.conversation.safeParse(notice.payload.data).success,
+    true,
+  );
+  assert.ok(jsonBytes(notice) < 1048576);
 });
 
 test("the notice data of each read model topic is its item schema", () => {

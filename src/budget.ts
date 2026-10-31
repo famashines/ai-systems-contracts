@@ -163,11 +163,13 @@ export type ThresholdCrossedEventPayloadV1 = z.infer<
 
 export const BudgetMonthV1 = z.object({
   month: BudgetMonth,
-  capMicroUsd: CapMicroUsd,
+  capMicroUsd: CapMicroUsd.nullable(),
   softCapMicroUsd: CapMicroUsd.exactOptional(),
   spentMicroUsd: MicroUsd,
   reservedMicroUsd: MicroUsd,
   remainingMicroUsd: MicroUsd,
+  overCapMicroUsd: MicroUsd,
   rev: z.int().nonnegative(),
+  asOf: z.int().min(1),
 });
 export type BudgetMonthV1 = z.infer<typeof BudgetMonthV1>;

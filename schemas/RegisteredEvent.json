@@ -710,6 +710,11 @@
                   "type": "integer",
                   "minimum": 1000,
                   "maximum": 3600000
+                },
+                "maxCostMicroUsd": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
                 }
               },
               "required": [
@@ -1677,7 +1682,8 @@
                 },
                 "text": {
                   "type": "string",
-                  "maxLength": 100000
+                  "maxLength": 100000,
+                  "pattern": "^[^\\0]*$"
                 },
                 "finishReason": {
                   "type": "string",
@@ -1875,6 +1881,11 @@
                   "maximum": 9007199254740991
                 },
                 "bodyId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "reservationId": {
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"

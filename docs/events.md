@@ -101,6 +101,7 @@ A request to ai-proxy for one LLM call: the rendered messages (inputs as data bl
 | `models` | array | yes |
 | `maxTokens` | integer | yes |
 | `maxDurationMs` | integer | yes |
+| `maxCostMicroUsd` | integer | no |
 
 ## orchestration.MessageRefused v1
 
@@ -217,6 +218,7 @@ One attempt failed. `nextModel` is the next model of the fallback chain; absent 
 | `inputTokens` | integer | no |
 | `outputTokens` | integer | no |
 | `bodyId` | string (uuid) | no |
+| `reservationId` | string (uuid) | no |
 
 ## budget.BudgetSet v1
 

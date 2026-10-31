@@ -18,6 +18,11 @@ export const FinishReason = z.enum([
 ]);
 export type FinishReason = z.infer<typeof FinishReason>;
 
+export const OutputText = z
+  .string()
+  .max(100000, { abort: true })
+  .regex(/^[^\0]*$/);
+
 const Tokens = z.int().nonnegative();
 const attempt = {
   taskId: Id,
@@ -43,7 +48,7 @@ export type CallStartedEventPayloadV1 = z.infer<
 export const CallCompletedEventPayloadV1 = z
   .object({
     ...attempt,
-    text: z.string().max(100000),
+    text: OutputText,
     finishReason: FinishReason,
     inputTokens: Tokens,
     outputTokens: Tokens,
@@ -69,6 +74,7 @@ export const CallFailedEventPayloadV1 = z
     inputTokens: Tokens.exactOptional(),
     outputTokens: Tokens.exactOptional(),
     bodyId: Id.exactOptional(),
+    reservationId: Id.exactOptional(),
   })
   .describe(
     "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed.",

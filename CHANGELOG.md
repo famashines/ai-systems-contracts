@@ -52,7 +52,13 @@ New:
   `NoticeDataV1`.
 - Deltas: `DeltaV1` (`{ attempt, i, text }`) and
   `deltaSubject(taskId, callId)`, which accepts only `Id` values.
+- Size: the messages of `CallRequested` have at most 900,000 bytes as
+  UTF-8 JSON, so the event stays under the NATS limit of 1 MiB. A test
+  checks the largest valid events and notices against 1 MiB.
+- `BudgetMonthV1` has a nullable `capMicroUsd` (no cap set),
+  `overCapMicroUsd` and `asOf`.
 - Shared schemas: `Reason`, `ModelId`, `DurationMs`, `ReplyText`,
+  `OutputText`,
   `MessageIntent`, `CallMessage`, `BudgetScope`, `CapScope`,
   `CapMicroUsd`, `BudgetMonth`, `PromptRef`, `PromptText`,
   `PromptVariable`, `AgentRef`, `AgentName`, `AgentLimits`,
