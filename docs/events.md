@@ -8,7 +8,7 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | ---- | -------------- | ------- | ----------- |
 | `orchestration.TaskSubmitted` | 1 | The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. | [events/orchestration.TaskSubmitted.v1.json](../schemas/events/orchestration.TaskSubmitted.v1.json) |
 | `orchestration.RunStarted` | 1 | Execution of the approved plan starts. | [events/orchestration.RunStarted.v1.json](../schemas/events/orchestration.RunStarted.v1.json) |
-| `orchestration.RunCompleted` | 1 | The run ended with a result summary and its total cost. | [events/orchestration.RunCompleted.v1.json](../schemas/events/orchestration.RunCompleted.v1.json) |
+| `orchestration.RunCompleted` | 1 | The run ended with a result summary and the cost of the attempt that gave it. | [events/orchestration.RunCompleted.v1.json](../schemas/events/orchestration.RunCompleted.v1.json) |
 | `orchestration.RunFailed` | 1 | The run ended with no result, with a code and a plain reason. | [events/orchestration.RunFailed.v1.json](../schemas/events/orchestration.RunFailed.v1.json) |
 | `orchestration.RunBlocked` | 1 | The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it. | [events/orchestration.RunBlocked.v1.json](../schemas/events/orchestration.RunBlocked.v1.json) |
 | `orchestration.CallRequested` | 1 | A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. | [events/orchestration.CallRequested.v1.json](../schemas/events/orchestration.CallRequested.v1.json) |
@@ -56,7 +56,7 @@ Execution of the approved plan starts.
 
 ## orchestration.RunCompleted v1
 
-The run ended with a result summary and its total cost.
+The run ended with a result summary and the cost of the attempt that gave it.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
