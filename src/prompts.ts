@@ -24,7 +24,12 @@ export type CreatePromptCommandPayloadV1 = z.infer<
 export const PublishPromptVersionCommandPayloadV1 = z.object({
   promptId: Id,
   text: PromptText,
-  variables: z.array(PromptVariable).max(50),
+  variables: z
+    .array(PromptVariable)
+    .max(50)
+    .refine((names) => new Set(names).size === names.length, {
+      message: "Each variable comes once",
+    }),
 });
 export type PublishPromptVersionCommandPayloadV1 = z.infer<
   typeof PublishPromptVersionCommandPayloadV1
@@ -44,3 +49,7 @@ export const PromptVersionPublishedEventPayloadV1 =
 export type PromptVersionPublishedEventPayloadV1 = z.infer<
   typeof PromptVersionPublishedEventPayloadV1
 >;
+
+export const PromptVersionResultV1 =
+  PromptVersionPublishedEventPayloadV1.extend({ name: PromptName });
+export type PromptVersionResultV1 = z.infer<typeof PromptVersionResultV1>;

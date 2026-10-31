@@ -23,5 +23,5 @@
     "reservedMicroUsd",
     "actualMicroUsd"
   ],
-  "description": "The real cost is booked and the rest of the hold is free."
+  "description": "The real cost is booked in full, also above the reserved amount, and the rest of the hold is free."
 }

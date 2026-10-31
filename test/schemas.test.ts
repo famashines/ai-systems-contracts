@@ -2,6 +2,17 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { z } from "zod";
 import {
+  ActiveAgentVersionResultV1,
+  AgentListItemV1,
+  AgentListResultV1,
+  BudgetMonthV1,
+  CallRequestedEventPayloadV1,
+  CapScope,
+  ConversationMessageV1,
+  ConversationThreadResultV1,
+  NoticeDataV1,
+  RunBlockedEventPayloadV1,
+  SettleReservationReplyV1,
   ActivateAgentVersionCommandPayloadV1,
   Actor,
   AgentCreatedEventPayloadV1,
@@ -30,9 +41,11 @@ import {
   PromptText,
   PromptVariable,
   PromptVersionPublishedEventPayloadV1,
+  PromptVersionResultV1,
   PublishAgentVersionCommandPayloadV1,
   PublishPromptVersionCommandPayloadV1,
   Reason,
+  ReplyText,
   ReservationExpiredEventPayloadV1,
   ReservationRefusedEventPayloadV1,
   ReservationSettledEventPayloadV1,
@@ -132,6 +145,7 @@ const without = (value: object, key: string): unknown =>
 const id2 = "5c1e8a7b-2d3f-4e6a-8b9c-0d1e2f3a4b5c";
 const badMoney = [-1, 1.5, "1", null, Number.MAX_SAFE_INTEGER + 1];
 const month = { kind: "month", key: "2026-10" };
+const everyMonth = { kind: "month" };
 const owned = { conversationId: id, messageId: id2, text: "Hi" };
 const refused = {
   taskId: id,
@@ -163,13 +177,16 @@ const agentVersion = {
   version: 2,
 };
 const started = {
+  taskId: id2,
   callId: id,
   attempt: 1,
   model: "openai/gpt-4o-mini",
-  agent: { agentId: id2, version: 1 },
+  agentId: id2,
+  agentVersion: 1,
   reservationId: id2,
 };
 const completed = {
+  taskId: id2,
   callId: id,
   attempt: 1,
   model: "openai/gpt-4o-mini",
@@ -183,6 +200,7 @@ const completed = {
   bodyId: id2,
 };
 const failed = {
+  taskId: id2,
   callId: id,
   attempt: 1,
   model: "openai/gpt-4o-mini",
@@ -193,20 +211,22 @@ const failed = {
 };
 const reserve = {
   reservationId: id,
-  callId: id2,
-  scopes: [month, { kind: "task", key: id2 }],
-  worstCaseMicroUsd: 25_000,
+  taskId: id2,
+  agentId: id2,
+  amountMicroUsd: 25_000,
 };
 const reserved = {
   reservationId: id,
-  callId: id2,
-  scopes: [month],
+  taskId: id2,
+  agentId: id2,
+  scopes: [month, { kind: "task", key: id2 }],
   amountMicroUsd: 25_000,
   expiresAt: now,
 };
 const refusal = {
   reservationId: id,
-  callId: id2,
+  taskId: id2,
+  agentId: id2,
   scope: month,
   amountMicroUsd: 25_000,
   reason: "Monthly cap reached: 19.80 of 20.00 USD",
@@ -231,7 +251,40 @@ const errorCodes = [
   "method_not_allowed",
   "payload_too_large",
   "unsupported_media_type",
+  "runaway_stopped",
+  "empty_output",
 ];
+const requested = {
+  taskId: id,
+  callId: id2,
+  agentId: id2,
+  agentVersion: 1,
+  messages: [
+    { role: "system", content: "You are the writer." },
+    { role: "user", content: '<data source="owner">Hi</data>' },
+  ],
+  models: ["openai/gpt-4o-mini", "anthropic/claude-haiku-4.5"],
+  maxTokens: 1024,
+  maxDurationMs: 600000,
+};
+const shown = { messageId: id, text: "Hi", createdAt: now, rev: 1, asOf: 2 };
+const agentItem = {
+  agentId: id,
+  name: "writer",
+  enabled: true,
+  activeVersion: 1,
+  latestVersion: 2,
+  rev: 3,
+  asOf: 4,
+};
+const budgetMonth = {
+  month: "2026-10",
+  capMicroUsd: 20_000_000,
+  spentMicroUsd: 1_500_000,
+  reservedMicroUsd: 25_000,
+  remainingMicroUsd: 18_475_000,
+  rev: 9,
+};
 
 const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
@@ -333,7 +386,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "TaskStatus",
     TaskStatus,
-    ["submitted", "awaiting_approval", "cancelled"],
+    ["submitted", "awaiting_approval", "blocked", "cancelled"],
     ["Submitted", "done"],
   ],
   [
@@ -475,7 +528,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { type: "subscribed", topics: ["tasks"], fromSeq: 5 },
       notice,
       { ...notice, commandId: id },
-      { type: "delta", taskId: id, callId: id, i: 0, text: "Hel" },
+      { type: "delta", taskId: id, callId: id, attempt: 1, i: 0, text: "Hel" },
       { type: "unsubscribed", topics: ["budget", `conversation:${id}`] },
       { type: "resync", reason: "too_old" },
       { type: "error", code: "forbidden", message: "Topic is not allowed" },
@@ -491,12 +544,28 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { type: "resync", reason: "server_restart" },
       { type: "unsubscribed", topics: [] },
       { type: "unsubscribed", topics: ["chat"] },
-      { type: "delta", taskId: id, callId: id, i: 1.5, text: "x" },
-      { type: "delta", taskId: upperId, callId: id, i: 0, text: "x" },
+      { type: "delta", taskId: id, callId: id, attempt: 1, i: 1.5, text: "x" },
+      { type: "delta", taskId: id, callId: id, attempt: 0, i: 0, text: "x" },
+      { type: "delta", taskId: id, callId: id, i: 0, text: "x" },
+      {
+        type: "delta",
+        taskId: upperId,
+        callId: id,
+        attempt: 1,
+        i: 0,
+        text: "x",
+      },
       { type: "error", code: "oops", message: "x" },
       { type: "error", code: "internal", message: "x".repeat(1001) },
-      { type: "delta", taskId: id, callId: id, i: -1, text: "x" },
-      { type: "delta", taskId: id, callId: id, i: 0, text: "x".repeat(16385) },
+      { type: "delta", taskId: id, callId: id, attempt: 1, i: -1, text: "x" },
+      {
+        type: "delta",
+        taskId: id,
+        callId: id,
+        attempt: 1,
+        i: 0,
+        text: "x".repeat(16385),
+      },
     ],
   ],
   ["ErrorCode", ErrorCode, errorCodes, ["teapot"]],
@@ -523,16 +592,19 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     "DeltaV1",
     DeltaV1,
     [
-      { i: 0, text: "" },
-      { i: 7, text: "x".repeat(16384) },
+      { attempt: 1, i: 0, text: "" },
+      { attempt: 2, i: 7, text: "x".repeat(16384) },
     ],
     [
-      { i: -1, text: "x" },
-      { i: 1.5, text: "x" },
-      { i: "0", text: "x" },
-      { i: 0, text: "x".repeat(16385) },
-      { i: 0 },
-      { text: "x" },
+      { attempt: 1, i: -1, text: "x" },
+      { attempt: 1, i: 1.5, text: "x" },
+      { attempt: 1, i: "0", text: "x" },
+      { attempt: 1, i: 0, text: "x".repeat(16385) },
+      { attempt: 0, i: 0, text: "x" },
+      { attempt: 1.5, i: 0, text: "x" },
+      { i: 0, text: "x" },
+      { attempt: 1, i: 0 },
+      { attempt: 1, text: "x" },
     ],
   ],
   [
@@ -572,16 +644,20 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...owned, intent: "chat", taskId: id },
       { ...owned, intent: "steer", taskId: "x" },
       { ...owned, intent: "new_task", text: "" },
+      { ...owned, intent: "new_task", taskId: id },
       { conversationId: id, text: "Hi", intent: "new_task" },
     ],
   ],
   [
     "AgentReplyPostedEventPayloadV1",
     AgentReplyPostedEventPayloadV1,
-    [reply, without(reply, "runId")],
+    [reply, without(reply, "runId"), { ...reply, text: "x".repeat(100000) }],
     [
       { ...reply, sourceEventId: "x" },
       { ...reply, text: "" },
+      { ...reply, text: " \n" },
+      { ...reply, text: "a\0b" },
+      { ...reply, text: "x".repeat(100001) },
       { ...reply, taskId: undefined },
     ],
   ],
@@ -594,7 +670,10 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "RunCompletedEventPayloadV1",
     RunCompletedEventPayloadV1,
-    [{ taskId: id, runId: id2, summary: "Done", costMicroUsd: 0 }],
+    [
+      { taskId: id, runId: id2, summary: "Done", costMicroUsd: 0 },
+      { taskId: id, runId: id2, summary: "x".repeat(100000), costMicroUsd: 1 },
+    ],
     [
       ...badMoney.map((costMicroUsd) => ({
         taskId: id,
@@ -603,13 +682,17 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
         costMicroUsd,
       })),
       { taskId: id, runId: id2, summary: "", costMicroUsd: 1 },
+      { taskId: id, runId: id2, summary: "x".repeat(100001), costMicroUsd: 1 },
       { taskId: id, runId: id2, summary: "Done" },
     ],
   ],
   [
     "RunFailedEventPayloadV1",
     RunFailedEventPayloadV1,
-    [{ taskId: id, runId: id2, code: "budget_refused", reason: "Cap reached" }],
+    [
+      { taskId: id, runId: id2, code: "budget_refused", reason: "Cap reached" },
+      { taskId: id, runId: id2, code: "empty_output", reason: "No text" },
+    ],
     [
       { taskId: id, runId: id2, code: "oops", reason: "x" },
       { taskId: id, runId: id2, code: "internal", reason: "" },
@@ -768,7 +851,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...started, attempt: 0 },
       { ...started, model: "gpt" },
       { ...started, reservationId: "x" },
-      { ...started, agent: { agentId: id2 } },
+      { ...started, agentVersion: 0 },
+      { ...started, taskId: "x" },
     ],
   ],
   [
@@ -828,44 +912,47 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     "SetBudgetCommandPayloadV1",
     SetBudgetCommandPayloadV1,
     [
-      { scope: month, hardCapMicroUsd: 20_000_000 },
-      { scope: month, hardCapMicroUsd: 0, softCapMicroUsd: 0 },
+      { scope: everyMonth, hardCapMicroUsd: 20_000_000 },
+      { scope: everyMonth, hardCapMicroUsd: 0, softCapMicroUsd: 0 },
+      { scope: { kind: "task", key: id }, hardCapMicroUsd: 1_000_000_000_000 },
     ],
     [
-      ...badMoney.map((hardCapMicroUsd) => ({ scope: month, hardCapMicroUsd })),
+      ...badMoney.map((hardCapMicroUsd) => ({
+        scope: everyMonth,
+        hardCapMicroUsd,
+      })),
       ...badMoney.map((softCapMicroUsd) => ({
-        scope: month,
+        scope: everyMonth,
         hardCapMicroUsd: 1,
         softCapMicroUsd,
       })),
+      { scope: everyMonth, hardCapMicroUsd: 1_000_000_000_001 },
+      { scope: { kind: "task" }, hardCapMicroUsd: 1 },
       { hardCapMicroUsd: 1 },
     ],
   ],
   [
     "BudgetSetEventPayloadV1",
     BudgetSetEventPayloadV1,
-    [{ scope: month, hardCapMicroUsd: 20_000_000, softCapMicroUsd: 10 }],
-    [{ scope: month, hardCapMicroUsd: 0.01 }],
+    [{ scope: everyMonth, hardCapMicroUsd: 20_000_000, softCapMicroUsd: 10 }],
+    [{ scope: everyMonth, hardCapMicroUsd: 0.01 }],
   ],
   [
     "ReserveFundsRequestV1",
     ReserveFundsRequestV1,
     [
       reserve,
-      { ...reserve, worstCaseMicroUsd: 0, maxDurationMs: 3600000 },
-      { ...reserve, maxDurationMs: 1000 },
+      { ...reserve, amountMicroUsd: 0, ttlMs: 3600000 },
+      { ...reserve, ttlMs: 1000 },
     ],
     [
-      ...badMoney.map((worstCaseMicroUsd) => ({
-        ...reserve,
-        worstCaseMicroUsd,
-      })),
-      { ...reserve, scopes: [] },
-      { ...reserve, scopes: Array.from({ length: 5 }, () => month) },
-      { ...reserve, maxDurationMs: 999 },
-      { ...reserve, maxDurationMs: 3600001 },
+      ...badMoney.map((amountMicroUsd) => ({ ...reserve, amountMicroUsd })),
+      { ...reserve, ttlMs: 999 },
+      { ...reserve, ttlMs: 3600001 },
+      { ...reserve, ttlMs: 1.5 },
       { ...reserve, reservationId: upperId },
-      { ...reserve, callId: undefined },
+      { ...reserve, taskId: undefined },
+      { ...reserve, agentId: "x" },
     ],
   ],
   [
@@ -898,12 +985,166 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     ],
   ],
   [
+    "SettleReservationReplyV1",
+    SettleReservationReplyV1,
+    [
+      { state: "settled", reservationId: id, actualMicroUsd: 140 },
+      { state: "already_settled", reservationId: id, actualMicroUsd: 140 },
+      { state: "expired", reservationId: id, amountMicroUsd: 25_000 },
+      { state: "unknown", reservationId: id },
+    ],
+    [
+      { state: "settled", reservationId: id },
+      { state: "expired", reservationId: id },
+      { state: "settled", reservationId: id, actualMicroUsd: 1.5 },
+      { state: "lost", reservationId: id },
+      { state: "unknown" },
+    ],
+  ],
+  [
+    "CapScope",
+    CapScope,
+    [everyMonth, { kind: "agent", key: id }],
+    [month, { kind: "agent" }, { kind: "month", key: id }],
+  ],
+  [
+    "BudgetMonthV1",
+    BudgetMonthV1,
+    [budgetMonth, { ...budgetMonth, softCapMicroUsd: 10_000_000 }],
+    [
+      ...badMoney.map((spentMicroUsd) => ({ ...budgetMonth, spentMicroUsd })),
+      ...badMoney.map((remainingMicroUsd) => ({
+        ...budgetMonth,
+        remainingMicroUsd,
+      })),
+      { ...budgetMonth, capMicroUsd: 1_000_000_000_001 },
+      { ...budgetMonth, month: "2026-13" },
+      { ...budgetMonth, rev: -1 },
+    ],
+  ],
+  [
+    "CallRequestedEventPayloadV1",
+    CallRequestedEventPayloadV1,
+    [
+      requested,
+      { ...requested, models: ["openai/gpt-4o"], maxTokens: 16384 },
+      {
+        ...requested,
+        messages: [{ role: "assistant", content: "x".repeat(100000) }],
+      },
+    ],
+    [
+      { ...requested, messages: [] },
+      { ...requested, messages: [{ role: "tool", content: "x" }] },
+      { ...requested, messages: [{ role: "user", content: "" }] },
+      {
+        ...requested,
+        messages: [{ role: "user", content: "x".repeat(100001) }],
+      },
+      {
+        ...requested,
+        messages: Array.from({ length: 51 }, () => ({
+          role: "user",
+          content: "x",
+        })),
+      },
+      { ...requested, models: [] },
+      { ...requested, models: ["gpt"] },
+      { ...requested, maxTokens: 0 },
+      { ...requested, maxTokens: 16385 },
+      { ...requested, maxDurationMs: 999 },
+      { ...requested, agentVersion: 0 },
+      { ...requested, taskId: upperId },
+      without(requested, "maxDurationMs"),
+    ],
+  ],
+  [
+    "RunBlockedEventPayloadV1",
+    RunBlockedEventPayloadV1,
+    [
+      { taskId: id, runId: id2, code: "budget_refused", reason: "Cap reached" },
+      { taskId: id, runId: id2, code: "runaway_stopped", reason: "Loop" },
+    ],
+    [
+      { taskId: id, runId: id2, code: "internal", reason: "x" },
+      { taskId: id, runId: id2, code: "budget_refused", reason: "" },
+      { taskId: id, code: "budget_refused", reason: "x" },
+    ],
+  ],
+  [
+    "ConversationMessageV1",
+    ConversationMessageV1,
+    [
+      { ...shown, role: "owner", intent: "new_task" },
+      { ...shown, role: "owner", intent: "steer", taskId: id2 },
+      { ...shown, role: "agent", taskId: id2 },
+      { ...shown, role: "agent", taskId: id2, costMicroUsd: 140 },
+    ],
+    [
+      { ...shown, role: "owner" },
+      { ...shown, role: "agent" },
+      { ...shown, role: "agent", taskId: id2, costMicroUsd: 1.5 },
+      { ...shown, role: "agent", taskId: id2, costMicroUsd: -1 },
+      { ...shown, role: "system", taskId: id2 },
+      { ...shown, role: "owner", intent: "new_task", text: "" },
+      { ...shown, role: "owner", intent: "new_task", asOf: 0 },
+      { ...shown, role: "owner", intent: "new_task", createdAt: "now" },
+    ],
+  ],
+  [
+    "ConversationThreadResultV1",
+    ConversationThreadResultV1,
+    [
+      { items: [], headSeq: 0 },
+      { items: [{ ...shown, role: "agent", taskId: id2 }], headSeq: 3 },
+    ],
+    [{ items: [{}], headSeq: 0 }, { items: [] }],
+  ],
+  [
+    "AgentListItemV1",
+    AgentListItemV1,
+    [
+      agentItem,
+      { agentId: id, name: "writer", enabled: false, rev: 0, asOf: 1 },
+    ],
+    [
+      { ...agentItem, enabled: "yes" },
+      { ...agentItem, activeVersion: 0 },
+      { ...agentItem, name: "Writer" },
+      without(agentItem, "asOf"),
+    ],
+  ],
+  [
+    "AgentListResultV1",
+    AgentListResultV1,
+    [{ items: [agentItem], headSeq: 1 }],
+    [{ items: [{}], headSeq: 1 }, { items: [agentItem] }],
+  ],
+  [
+    "ActiveAgentVersionResultV1",
+    ActiveAgentVersionResultV1,
+    [{ ...agentVersion, name: "writer", enabled: true }],
+    [
+      agentVersion,
+      { ...agentVersion, name: "writer", enabled: true, version: 0 },
+      { ...agentVersion, name: "writer", enabled: "true" },
+    ],
+  ],
+  [
+    "PromptVersionResultV1",
+    PromptVersionResultV1,
+    [{ ...promptVersion, name: "Writer" }],
+    [promptVersion, { ...promptVersion, name: "" }],
+  ],
+  [
     "FundsReservedEventPayloadV1",
     FundsReservedEventPayloadV1,
     [reserved],
     [
       ...badMoney.map((amountMicroUsd) => ({ ...reserved, amountMicroUsd })),
       { ...reserved, scopes: [] },
+      { ...reserved, scopes: [everyMonth] },
+      { ...reserved, taskId: "x" },
       { ...reserved, expiresAt: "soon" },
     ],
   ],
@@ -1100,6 +1341,8 @@ test("long untrusted strings are checked in linear time", () => {
     [Topic, "task:" + "0".repeat(200000)],
     [ViewSubject, "view.task." + "0".repeat(200000)],
     [PromptText, "a".repeat(200000) + "\0"],
+    [ReplyText, "a".repeat(100000) + "\0"],
+    [ReplyText, "a".repeat(200000) + "\0"],
     [PromptVariable, "a".repeat(200000) + "!"],
     [ModelId, "a".repeat(200000)],
     [AgentName, "a".repeat(200000) + "!"],
@@ -1171,11 +1414,121 @@ test("PostOwnerMessage newTask is false by default", () => {
 });
 
 test("a reservation holds for 10 minutes by default", () => {
-  assert.equal(ReserveFundsRequestV1.parse(reserve).maxDurationMs, 600000);
+  assert.equal(ReserveFundsRequestV1.parse(reserve).ttlMs, 600000);
 });
 
 test("deltaSubject gives delta.<taskId>.<callId>", () => {
   assert.equal(deltaSubject(id, id2), `delta.${id}.${id2}`);
+});
+
+test("deltaSubject refuses a value that is not an Id", () => {
+  const pairs: [string, string][] = [
+    ["x", id],
+    [id, upperId],
+    [`${id}.>`, id],
+    [id, "*"],
+  ];
+  for (const [taskId, callId] of pairs)
+    assert.throws(() => deltaSubject(taskId, callId), z.ZodError);
+});
+
+const refusedAt = (schema: z.ZodType, value: unknown, path: string) => {
+  const result = schema.safeParse(value);
+  assert.ok(!result.success, JSON.stringify(value));
+  assert.deepEqual(
+    result.error.issues.map((issue) => issue.path.join(".")),
+    [path],
+  );
+};
+
+test("a soft cap above the hard cap is refused", () => {
+  for (const schema of [SetBudgetCommandPayloadV1, BudgetSetEventPayloadV1])
+    refusedAt(
+      schema,
+      { scope: everyMonth, hardCapMicroUsd: 10, softCapMicroUsd: 11 },
+      "softCapMicroUsd",
+    );
+});
+
+test("a message for a new task has no taskId", () => {
+  refusedAt(
+    PostOwnerMessageCommandPayloadV1,
+    { conversationId: id, text: "Hi", taskId: id2, newTask: true },
+    "taskId",
+  );
+});
+
+test("conversationId and messageId of a task come together", () => {
+  refusedAt(
+    TaskSubmittedEventPayloadV1,
+    { ...event.payload, conversationId: id },
+    "messageId",
+  );
+  refusedAt(
+    TaskSubmittedEventPayloadV1,
+    { ...event.payload, messageId: id },
+    "messageId",
+  );
+});
+
+test("prompt variables and models come once", () => {
+  refusedAt(
+    PublishPromptVersionCommandPayloadV1,
+    { promptId: id, text: "Hi", variables: ["a", "b", "a"] },
+    "variables",
+  );
+  refusedAt(
+    PublishAgentVersionCommandPayloadV1,
+    { ...agentVersion, models: ["a/b", "a/b"] },
+    "models",
+  );
+  refusedAt(
+    CallRequestedEventPayloadV1,
+    { ...requested, models: ["a/b", "c/d", "a/b"] },
+    "models",
+  );
+});
+
+test("the messages of a call have at most 400000 characters together", () => {
+  const message = { role: "user", content: "x".repeat(100000) };
+  assert.equal(
+    CallRequestedEventPayloadV1.safeParse({
+      ...requested,
+      messages: Array.from({ length: 4 }, () => message),
+    }).success,
+    true,
+  );
+  refusedAt(
+    CallRequestedEventPayloadV1,
+    {
+      ...requested,
+      messages: [
+        ...Array.from({ length: 4 }, () => message),
+        { role: "user", content: "x" },
+      ],
+    },
+    "messages",
+  );
+});
+
+test("the notice data of each read model topic is its item schema", () => {
+  assert.deepEqual(Object.keys(NoticeDataV1), [
+    "tasks",
+    "budget",
+    "agents",
+    "conversation",
+  ]);
+  assert.equal(NoticeDataV1.tasks.safeParse(item).success, true);
+  assert.equal(NoticeDataV1.budget.safeParse(budgetMonth).success, true);
+  assert.equal(NoticeDataV1.agents.safeParse(agentItem).success, true);
+  assert.equal(
+    NoticeDataV1.conversation.safeParse({
+      ...shown,
+      role: "agent",
+      taskId: id2,
+    }).success,
+    true,
+  );
 });
 
 test("rpc subjects start with rpc. so that no stream takes them", () => {
@@ -1187,9 +1540,10 @@ test("rpc subjects start with rpc. so that no stream takes them", () => {
 
 test("the delta of a server message has the same rules as the core NATS body", () => {
   for (const body of [
-    { i: 0, text: "x" },
-    { i: -1, text: "x" },
-    { i: 0, text: "x".repeat(16385) },
+    { attempt: 1, i: 0, text: "x" },
+    { attempt: 1, i: -1, text: "x" },
+    { attempt: 0, i: 0, text: "x" },
+    { attempt: 1, i: 0, text: "x".repeat(16385) },
   ])
     assert.equal(
       ServerMessageV1.safeParse({

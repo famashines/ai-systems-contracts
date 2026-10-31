@@ -77,7 +77,7 @@
         },
         "text": {
           "type": "string",
-          "maxLength": 20000,
+          "maxLength": 100000,
           "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
         },
         "taskId": {

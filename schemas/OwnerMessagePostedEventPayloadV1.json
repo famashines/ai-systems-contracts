@@ -22,6 +22,9 @@
         "intent": {
           "type": "string",
           "const": "new_task"
+        },
+        "taskId": {
+          "not": {}
         }
       },
       "required": [
@@ -71,5 +74,5 @@
       ]
     }
   ],
-  "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`."
+  "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`."
 }

@@ -191,6 +191,11 @@
           "format": "uuid",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
         "i": {
           "type": "integer",
           "minimum": 0,
@@ -205,6 +210,7 @@
         "type",
         "taskId",
         "callId",
+        "attempt",
         "i",
         "text"
       ]
@@ -249,7 +255,9 @@
             "budget_refused",
             "method_not_allowed",
             "payload_too_large",
-            "unsupported_media_type"
+            "unsupported_media_type",
+            "runaway_stopped",
+            "empty_output"
           ]
         },
         "message": {

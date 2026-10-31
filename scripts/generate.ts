@@ -79,7 +79,7 @@ for (const { type, schemaVersion, payload, schema } of eventCatalog) {
     ...[...keys].map((key) => {
       const fields = variants.flatMap((variant) => {
         const field = variant.properties?.[key];
-        return field ? [field] : [];
+        return field && !("not" in field) ? [field] : [];
       });
       const required = variants.every((variant) =>
         variant.required?.includes(key),

@@ -26,9 +26,11 @@ import {
   CallStartedEventPayloadV1,
 } from "./llm.ts";
 import {
+  CallRequestedEventPayloadV1,
   MessageRefusedEventPayloadV1,
   RunCompletedEventPayloadV1,
   RunFailedEventPayloadV1,
+  RunBlockedEventPayloadV1,
   RunStartedEventPayloadV1,
   TaskSubmittedEventPayloadV1,
 } from "./orchestration.ts";
@@ -46,6 +48,10 @@ export const eventRegistry = Object.freeze({
     1: RunCompletedEventPayloadV1,
   }),
   "orchestration.RunFailed": Object.freeze({ 1: RunFailedEventPayloadV1 }),
+  "orchestration.RunBlocked": Object.freeze({ 1: RunBlockedEventPayloadV1 }),
+  "orchestration.CallRequested": Object.freeze({
+    1: CallRequestedEventPayloadV1,
+  }),
   "orchestration.MessageRefused": Object.freeze({
     1: MessageRefusedEventPayloadV1,
   }),

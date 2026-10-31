@@ -10,19 +10,21 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | `orchestration.RunStarted` | 1 | Execution of the approved plan starts. | [events/orchestration.RunStarted.v1.json](../schemas/events/orchestration.RunStarted.v1.json) |
 | `orchestration.RunCompleted` | 1 | The run ended with a result summary and its total cost. | [events/orchestration.RunCompleted.v1.json](../schemas/events/orchestration.RunCompleted.v1.json) |
 | `orchestration.RunFailed` | 1 | The run ended with no result, with a code and a plain reason. | [events/orchestration.RunFailed.v1.json](../schemas/events/orchestration.RunFailed.v1.json) |
+| `orchestration.RunBlocked` | 1 | The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it. | [events/orchestration.RunBlocked.v1.json](../schemas/events/orchestration.RunBlocked.v1.json) |
+| `orchestration.CallRequested` | 1 | A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. | [events/orchestration.CallRequested.v1.json](../schemas/events/orchestration.CallRequested.v1.json) |
 | `orchestration.MessageRefused` | 1 | A `steer` or `answer` message for a task that cannot take it, with the reason. | [events/orchestration.MessageRefused.v1.json](../schemas/events/orchestration.MessageRefused.v1.json) |
 | `conversation.ConversationStarted` | 1 | A new chat thread. | [events/conversation.ConversationStarted.v1.json](../schemas/events/conversation.ConversationStarted.v1.json) |
-| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
+| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
 | `conversation.AgentReplyPosted` | 1 | An agent reply in a thread, made from the orchestration event `sourceEventId`. | [events/conversation.AgentReplyPosted.v1.json](../schemas/events/conversation.AgentReplyPosted.v1.json) |
 | `prompts.PromptCreated` | 1 | A new prompt. | [events/prompts.PromptCreated.v1.json](../schemas/events/prompts.PromptCreated.v1.json) |
 | `prompts.PromptVersionPublished` | 1 | A new immutable version of a prompt, with its variables. | [events/prompts.PromptVersionPublished.v1.json](../schemas/events/prompts.PromptVersionPublished.v1.json) |
 | `llm.CallStarted` | 1 | One attempt of a call starts on one model, with its own reservation. | [events/llm.CallStarted.v1.json](../schemas/events/llm.CallStarted.v1.json) |
 | `llm.CallCompleted` | 1 | The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response. | [events/llm.CallCompleted.v1.json](../schemas/events/llm.CallCompleted.v1.json) |
 | `llm.CallFailed` | 1 | One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. | [events/llm.CallFailed.v1.json](../schemas/events/llm.CallFailed.v1.json) |
-| `budget.BudgetSet` | 1 | A cap for a scope: a hard amount and an optional soft amount. | [events/budget.BudgetSet.v1.json](../schemas/events/budget.BudgetSet.v1.json) |
+| `budget.BudgetSet` | 1 | A cap for a scope: a hard amount and an optional soft amount. The month cap applies to every month. | [events/budget.BudgetSet.v1.json](../schemas/events/budget.BudgetSet.v1.json) |
 | `budget.FundsReserved` | 1 | Money is held for a call. Answer to `rpc.budget.reserve`. | [events/budget.FundsReserved.v1.json](../schemas/events/budget.FundsReserved.v1.json) |
 | `budget.ReservationRefused` | 1 | A scope has no room for the call. Answer to `rpc.budget.reserve`. | [events/budget.ReservationRefused.v1.json](../schemas/events/budget.ReservationRefused.v1.json) |
-| `budget.ReservationSettled` | 1 | The real cost is booked and the rest of the hold is free. | [events/budget.ReservationSettled.v1.json](../schemas/events/budget.ReservationSettled.v1.json) |
+| `budget.ReservationSettled` | 1 | The real cost is booked in full, also above the reserved amount, and the rest of the hold is free. | [events/budget.ReservationSettled.v1.json](../schemas/events/budget.ReservationSettled.v1.json) |
 | `budget.ReservationExpired` | 1 | No settle came in time. The full reserved amount is booked as spent. | [events/budget.ReservationExpired.v1.json](../schemas/events/budget.ReservationExpired.v1.json) |
 | `budget.ThresholdCrossed` | 1 | Spend went over 50, 80 or 100% of a soft or hard cap. | [events/budget.ThresholdCrossed.v1.json](../schemas/events/budget.ThresholdCrossed.v1.json) |
 | `agents.AgentCreated` | 1 | A new agent. | [events/agents.AgentCreated.v1.json](../schemas/events/agents.AgentCreated.v1.json) |
@@ -71,8 +73,34 @@ The run ended with no result, with a code and a plain reason.
 | ----- | ---- | -------- |
 | `taskId` | string (uuid) | yes |
 | `runId` | string (uuid) | yes |
-| `code` | `"validation_failed"` \| `"not_found"` \| `"conflict"` \| `"unauthorized"` \| `"forbidden"` \| `"rate_limited"` \| `"internal"` \| `"unavailable"` \| `"budget_refused"` \| `"method_not_allowed"` \| `"payload_too_large"` \| `"unsupported_media_type"` | yes |
+| `code` | `"validation_failed"` \| `"not_found"` \| `"conflict"` \| `"unauthorized"` \| `"forbidden"` \| `"rate_limited"` \| `"internal"` \| `"unavailable"` \| `"budget_refused"` \| `"method_not_allowed"` \| `"payload_too_large"` \| `"unsupported_media_type"` \| `"runaway_stopped"` \| `"empty_output"` | yes |
 | `reason` | string | yes |
+
+## orchestration.RunBlocked v1
+
+The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `code` | `"budget_refused"` \| `"runaway_stopped"` | yes |
+| `reason` | string | yes |
+
+## orchestration.CallRequested v1
+
+A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `callId` | string (uuid) | yes |
+| `agentId` | string (uuid) | yes |
+| `agentVersion` | integer | yes |
+| `messages` | array | yes |
+| `models` | array | yes |
+| `maxTokens` | integer | yes |
+| `maxDurationMs` | integer | yes |
 
 ## orchestration.MessageRefused v1
 
@@ -96,7 +124,7 @@ A new chat thread.
 
 ## conversation.OwnerMessagePosted v1
 
-The owner posted a message in a thread. `taskId` is present for `steer` and `answer`.
+The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -145,10 +173,12 @@ One attempt of a call starts on one model, with its own reservation.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
 | `callId` | string (uuid) | yes |
 | `attempt` | integer | yes |
 | `model` | string | yes |
-| `agent` | object | yes |
+| `agentId` | string (uuid) | yes |
+| `agentVersion` | integer | yes |
 | `reservationId` | string (uuid) | yes |
 
 ## llm.CallCompleted v1
@@ -157,6 +187,7 @@ The call is done: output text, tokens, cost in micro-USD, latency, and the id of
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
 | `callId` | string (uuid) | yes |
 | `attempt` | integer | yes |
 | `model` | string | yes |
@@ -175,17 +206,21 @@ One attempt failed. `nextModel` is the next model of the fallback chain; absent 
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
 | `callId` | string (uuid) | yes |
 | `attempt` | integer | yes |
 | `model` | string | yes |
-| `errorClass` | `"rate_limit"` \| `"timeout"` \| `"provider"` \| `"invalid"` | yes |
+| `errorClass` | `"rate_limit"` \| `"timeout"` \| `"provider"` \| `"invalid"` \| `"budget_refused"` | yes |
 | `reason` | string | yes |
 | `costMicroUsd` | integer | yes |
 | `nextModel` | string | no |
+| `inputTokens` | integer | no |
+| `outputTokens` | integer | no |
+| `bodyId` | string (uuid) | no |
 
 ## budget.BudgetSet v1
 
-A cap for a scope: a hard amount and an optional soft amount.
+A cap for a scope: a hard amount and an optional soft amount. The month cap applies to every month.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -200,7 +235,8 @@ Money is held for a call. Answer to `rpc.budget.reserve`.
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `reservationId` | string (uuid) | yes |
-| `callId` | string (uuid) | yes |
+| `taskId` | string (uuid) | yes |
+| `agentId` | string (uuid) | yes |
 | `scopes` | array | yes |
 | `amountMicroUsd` | integer | yes |
 | `expiresAt` | string (date-time) | yes |
@@ -212,14 +248,15 @@ A scope has no room for the call. Answer to `rpc.budget.reserve`.
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `reservationId` | string (uuid) | yes |
-| `callId` | string (uuid) | yes |
+| `taskId` | string (uuid) | yes |
+| `agentId` | string (uuid) | yes |
 | `scope` | object | yes |
 | `amountMicroUsd` | integer | yes |
 | `reason` | string | yes |
 
 ## budget.ReservationSettled v1
 
-The real cost is booked and the rest of the hold is free.
+The real cost is booked in full, also above the reserved amount, and the rest of the hold is free.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |

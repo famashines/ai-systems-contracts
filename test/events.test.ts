@@ -91,6 +91,7 @@ test("parseEvent reads the events of each M2 context", () => {
       type: "llm.CallFailed",
       streamId: `call-${id}`,
       payload: {
+        taskId: id,
         callId: id,
         attempt: 1,
         model: "openai/gpt-4o",

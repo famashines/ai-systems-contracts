@@ -301,7 +301,7 @@
                 },
                 "summary": {
                   "type": "string",
-                  "maxLength": 20000,
+                  "maxLength": 100000,
                   "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
                 },
                 "costMicroUsd": {
@@ -426,7 +426,9 @@
                     "budget_refused",
                     "method_not_allowed",
                     "payload_too_large",
-                    "unsupported_media_type"
+                    "unsupported_media_type",
+                    "runaway_stopped",
+                    "empty_output"
                   ]
                 },
                 "reason": {
@@ -442,6 +444,285 @@
                 "reason"
               ],
               "description": "The run ended with no result, with a code and a plain reason."
+            }
+          },
+          "required": [
+            "eventId",
+            "type",
+            "schemaVersion",
+            "streamId",
+            "version",
+            "occurredAt",
+            "correlationId",
+            "causationId",
+            "actor",
+            "payload"
+          ]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "type": {
+              "type": "string",
+              "const": "orchestration.RunBlocked"
+            },
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "streamId": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z][a-z0-9]*-\\S+$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "occurredAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "correlationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "causationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "actor": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "agent",
+                    "system"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "runId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "budget_refused",
+                    "runaway_stopped"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                }
+              },
+              "required": [
+                "taskId",
+                "runId",
+                "code",
+                "reason"
+              ],
+              "description": "The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it."
+            }
+          },
+          "required": [
+            "eventId",
+            "type",
+            "schemaVersion",
+            "streamId",
+            "version",
+            "occurredAt",
+            "correlationId",
+            "causationId",
+            "actor",
+            "payload"
+          ]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "type": {
+              "type": "string",
+              "const": "orchestration.CallRequested"
+            },
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "streamId": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z][a-z0-9]*-\\S+$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "occurredAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "correlationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "causationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "actor": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "agent",
+                    "system"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "callId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "agentId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "agentVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "messages": {
+                  "minItems": 1,
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "system",
+                          "user",
+                          "assistant"
+                        ]
+                      },
+                      "content": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100000
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "content"
+                    ]
+                  }
+                },
+                "models": {
+                  "minItems": 1,
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+                  }
+                },
+                "maxTokens": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16384
+                },
+                "maxDurationMs": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 3600000
+                }
+              },
+              "required": [
+                "taskId",
+                "callId",
+                "agentId",
+                "agentVersion",
+                "messages",
+                "models",
+                "maxTokens",
+                "maxDurationMs"
+              ],
+              "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt."
             }
           },
           "required": [
@@ -763,6 +1044,9 @@
                     "intent": {
                       "type": "string",
                       "const": "new_task"
+                    },
+                    "taskId": {
+                      "not": {}
                     }
                   },
                   "required": [
@@ -812,7 +1096,7 @@
                   ]
                 }
               ],
-              "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`."
+              "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`."
             }
           },
           "required": [
@@ -910,7 +1194,7 @@
                 },
                 "text": {
                   "type": "string",
-                  "maxLength": 20000,
+                  "maxLength": 100000,
                   "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
                 },
                 "taskId": {
@@ -1240,6 +1524,11 @@
             "payload": {
               "type": "object",
               "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
                 "callId": {
                   "type": "string",
                   "format": "uuid",
@@ -1255,24 +1544,15 @@
                   "maxLength": 200,
                   "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
                 },
-                "agent": {
-                  "type": "object",
-                  "properties": {
-                    "agentId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-                    },
-                    "version": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 9007199254740991
-                    }
-                  },
-                  "required": [
-                    "agentId",
-                    "version"
-                  ]
+                "agentId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "agentVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
                 },
                 "reservationId": {
                   "type": "string",
@@ -1281,10 +1561,12 @@
                 }
               },
               "required": [
+                "taskId",
                 "callId",
                 "attempt",
                 "model",
-                "agent",
+                "agentId",
+                "agentVersion",
                 "reservationId"
               ],
               "description": "One attempt of a call starts on one model, with its own reservation."
@@ -1373,6 +1655,11 @@
             "payload": {
               "type": "object",
               "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
                 "callId": {
                   "type": "string",
                   "format": "uuid",
@@ -1433,6 +1720,7 @@
                 }
               },
               "required": [
+                "taskId",
                 "callId",
                 "attempt",
                 "model",
@@ -1531,6 +1819,11 @@
             "payload": {
               "type": "object",
               "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
                 "callId": {
                   "type": "string",
                   "format": "uuid",
@@ -1552,7 +1845,8 @@
                     "rate_limit",
                     "timeout",
                     "provider",
-                    "invalid"
+                    "invalid",
+                    "budget_refused"
                   ]
                 },
                 "reason": {
@@ -1569,9 +1863,25 @@
                   "type": "string",
                   "maxLength": 200,
                   "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+                },
+                "inputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "outputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "bodyId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                 }
               },
               "required": [
+                "taskId",
                 "callId",
                 "attempt",
                 "model",
@@ -1675,14 +1985,11 @@
                           "const": "month"
                         },
                         "key": {
-                          "type": "string",
-                          "maxLength": 7,
-                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                          "not": {}
                         }
                       },
                       "required": [
-                        "kind",
-                        "key"
+                        "kind"
                       ]
                     },
                     {
@@ -1712,19 +2019,19 @@
                 "hardCapMicroUsd": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9007199254740991
+                  "maximum": 1000000000000
                 },
                 "softCapMicroUsd": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9007199254740991
+                  "maximum": 1000000000000
                 }
               },
               "required": [
                 "scope",
                 "hardCapMicroUsd"
               ],
-              "description": "A cap for a scope: a hard amount and an optional soft amount."
+              "description": "A cap for a scope: a hard amount and an optional soft amount. The month cap applies to every month."
             }
           },
           "required": [
@@ -1815,7 +2122,12 @@
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                 },
-                "callId": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "agentId": {
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -1882,7 +2194,8 @@
               },
               "required": [
                 "reservationId",
-                "callId",
+                "taskId",
+                "agentId",
                 "scopes",
                 "amountMicroUsd",
                 "expiresAt"
@@ -1978,7 +2291,12 @@
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                 },
-                "callId": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "agentId": {
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -2040,7 +2358,8 @@
               },
               "required": [
                 "reservationId",
-                "callId",
+                "taskId",
+                "agentId",
                 "scope",
                 "amountMicroUsd",
                 "reason"
@@ -2152,7 +2471,7 @@
                 "reservedMicroUsd",
                 "actualMicroUsd"
               ],
-              "description": "The real cost is booked and the rest of the hold is free."
+              "description": "The real cost is booked in full, also above the reserved amount, and the rest of the hold is free."
             }
           },
           "required": [
@@ -2406,7 +2725,7 @@
                 "capMicroUsd": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9007199254740991
+                  "maximum": 1000000000000
                 }
               },
               "required": [

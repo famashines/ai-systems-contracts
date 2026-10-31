@@ -24,6 +24,9 @@ export type Actor = z.infer<typeof Actor>;
 export const Reason = z.string().min(1).max(1000);
 export type Reason = z.infer<typeof Reason>;
 
+export const DurationMs = z.int().min(1000).max(3600000);
+export type DurationMs = z.infer<typeof DurationMs>;
+
 export const ModelId = z
   .string()
   .max(200, { abort: true })

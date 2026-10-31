@@ -5,6 +5,7 @@
     "rate_limit",
     "timeout",
     "provider",
-    "invalid"
+    "invalid",
+    "budget_refused"
   ]
 }

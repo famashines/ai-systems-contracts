@@ -65,6 +65,11 @@
     "payload": {
       "type": "object",
       "properties": {
+        "taskId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
         "callId": {
           "type": "string",
           "format": "uuid",
@@ -80,24 +85,15 @@
           "maxLength": 200,
           "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
         },
-        "agent": {
-          "type": "object",
-          "properties": {
-            "agentId": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-            },
-            "version": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 9007199254740991
-            }
-          },
-          "required": [
-            "agentId",
-            "version"
-          ]
+        "agentId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "agentVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         },
         "reservationId": {
           "type": "string",
@@ -106,10 +102,12 @@
         }
       },
       "required": [
+        "taskId",
         "callId",
         "attempt",
         "model",
-        "agent",
+        "agentId",
+        "agentVersion",
         "reservationId"
       ],
       "description": "One attempt of a call starts on one model, with its own reservation."

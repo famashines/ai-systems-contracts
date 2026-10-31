@@ -23,13 +23,14 @@ export const Topic = z.union([
 export type Topic = z.infer<typeof Topic>;
 
 export const DeltaV1 = z.object({
+  attempt: z.int().min(1),
   i: z.int().nonnegative(),
   text: z.string().max(16384),
 });
 export type DeltaV1 = z.infer<typeof DeltaV1>;
 
-export const deltaSubject = (taskId: Id, callId: Id) =>
-  `delta.${taskId}.${callId}` as const;
+export const deltaSubject = (taskId: string, callId: string) =>
+  `delta.${Id.parse(taskId)}.${Id.parse(callId)}` as const;
 
 const Seq = z.int().nonnegative();
 const Token = z.string().min(1).max(8192);

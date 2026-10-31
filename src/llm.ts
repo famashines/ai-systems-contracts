@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { AgentRef } from "./agents.ts";
 import { Id, MicroUsd, ModelId, Reason } from "./common.ts";
 
 export const LlmErrorClass = z.enum([
@@ -7,6 +6,7 @@ export const LlmErrorClass = z.enum([
   "timeout",
   "provider",
   "invalid",
+  "budget_refused",
 ]);
 export type LlmErrorClass = z.infer<typeof LlmErrorClass>;
 
@@ -19,10 +19,20 @@ export const FinishReason = z.enum([
 export type FinishReason = z.infer<typeof FinishReason>;
 
 const Tokens = z.int().nonnegative();
-const attempt = { callId: Id, attempt: z.int().min(1), model: ModelId };
+const attempt = {
+  taskId: Id,
+  callId: Id,
+  attempt: z.int().min(1),
+  model: ModelId,
+};
 
 export const CallStartedEventPayloadV1 = z
-  .object({ ...attempt, agent: AgentRef, reservationId: Id })
+  .object({
+    ...attempt,
+    agentId: Id,
+    agentVersion: z.int().min(1),
+    reservationId: Id,
+  })
   .describe(
     "One attempt of a call starts on one model, with its own reservation.",
   );
@@ -56,6 +66,9 @@ export const CallFailedEventPayloadV1 = z
     reason: Reason,
     costMicroUsd: MicroUsd,
     nextModel: ModelId.exactOptional(),
+    inputTokens: Tokens.exactOptional(),
+    outputTokens: Tokens.exactOptional(),
+    bodyId: Id.exactOptional(),
   })
   .describe(
     "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed.",

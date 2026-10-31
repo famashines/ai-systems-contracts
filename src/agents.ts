@@ -25,7 +25,13 @@ export type CreateAgentCommandPayloadV1 = z.infer<
 export const PublishAgentVersionCommandPayloadV1 = z.object({
   agentId: Id,
   prompt: PromptRef,
-  models: z.array(ModelId).min(1).max(5),
+  models: z
+    .array(ModelId)
+    .min(1)
+    .max(5)
+    .refine((models) => new Set(models).size === models.length, {
+      message: "Each model comes once",
+    }),
   limits: AgentLimits,
 });
 export type PublishAgentVersionCommandPayloadV1 = z.infer<
@@ -79,4 +85,30 @@ export const AgentDisabledEventPayloadV1 = agent.describe(
 );
 export type AgentDisabledEventPayloadV1 = z.infer<
   typeof AgentDisabledEventPayloadV1
+>;
+
+export const AgentListItemV1 = z.object({
+  agentId: Id,
+  name: AgentName,
+  enabled: z.boolean(),
+  activeVersion: z.int().min(1).exactOptional(),
+  latestVersion: z.int().min(1).exactOptional(),
+  rev: z.int().nonnegative(),
+  asOf: z.int().min(1),
+});
+export type AgentListItemV1 = z.infer<typeof AgentListItemV1>;
+
+export const AgentListResultV1 = z.object({
+  items: z.array(AgentListItemV1),
+  headSeq: z.int().nonnegative(),
+});
+export type AgentListResultV1 = z.infer<typeof AgentListResultV1>;
+
+export const ActiveAgentVersionResultV1 =
+  AgentVersionPublishedEventPayloadV1.extend({
+    name: AgentName,
+    enabled: z.boolean(),
+  });
+export type ActiveAgentVersionResultV1 = z.infer<
+  typeof ActiveAgentVersionResultV1
 >;

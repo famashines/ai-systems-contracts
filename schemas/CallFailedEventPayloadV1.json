@@ -2,6 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "taskId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
     "callId": {
       "type": "string",
       "format": "uuid",
@@ -23,7 +28,8 @@
         "rate_limit",
         "timeout",
         "provider",
-        "invalid"
+        "invalid",
+        "budget_refused"
       ]
     },
     "reason": {
@@ -40,9 +46,25 @@
       "type": "string",
       "maxLength": 200,
       "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+    },
+    "inputTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "outputTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "bodyId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     }
   },
   "required": [
+    "taskId",
     "callId",
     "attempt",
     "model",
