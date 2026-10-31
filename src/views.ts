@@ -1,11 +1,23 @@
 import { z } from "zod";
+import { AgentListItemV1 } from "./agents.ts";
+import { BudgetMonthV1 } from "./budget.ts";
 import { Id } from "./common.ts";
+import { ConversationMessageV1 } from "./conversation.ts";
 import { EventEnvelopeV1 } from "./envelopes.ts";
+import { TaskListItemV1 } from "./orchestration.ts";
 import { Topic } from "./ws.ts";
+
+export const NoticeDataV1 = {
+  tasks: TaskListItemV1,
+  budget: BudgetMonthV1,
+  agents: AgentListItemV1,
+  conversation: ConversationMessageV1,
+} as const;
 
 export const ViewSubject = z.union([
   z.enum(["view.tasks", "view.budget", "view.agents", "view.notifications"]),
   z.templateLiteral(["view.task.", Id]),
+  z.templateLiteral(["view.conversation.", Id]),
 ]);
 export type ViewSubject = z.infer<typeof ViewSubject>;
 

@@ -21,6 +21,7 @@
         "awaiting_approval",
         "running",
         "paused",
+        "blocked",
         "completed",
         "failed",
         "cancelled",

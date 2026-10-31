@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "validation_failed",
+        "not_found",
+        "conflict",
+        "unauthorized",
+        "forbidden",
+        "rate_limited",
+        "internal",
+        "unavailable",
+        "budget_refused",
+        "method_not_allowed",
+        "payload_too_large",
+        "unsupported_media_type",
+        "runaway_stopped",
+        "empty_output"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    }
+  },
+  "required": [
+    "taskId",
+    "runId",
+    "code",
+    "reason"
+  ],
+  "description": "The run ended with no result, with a code and a plain reason."
+}

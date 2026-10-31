@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "messageId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 20000,
+          "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
+        },
+        "intent": {
+          "type": "string",
+          "const": "new_task"
+        },
+        "taskId": {
+          "not": {}
+        }
+      },
+      "required": [
+        "conversationId",
+        "messageId",
+        "text",
+        "intent"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "messageId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 20000,
+          "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
+        },
+        "intent": {
+          "type": "string",
+          "enum": [
+            "steer",
+            "answer"
+          ]
+        },
+        "taskId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "required": [
+        "conversationId",
+        "messageId",
+        "text",
+        "intent",
+        "taskId"
+      ]
+    }
+  ],
+  "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`."
+}

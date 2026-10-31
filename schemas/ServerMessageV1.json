@@ -56,6 +56,10 @@
               {
                 "type": "string",
                 "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
               }
             ]
           }
@@ -70,6 +74,45 @@
         "type",
         "topics",
         "fromSeq"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "unsubscribed"
+        },
+        "topics": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "tasks",
+                  "budget",
+                  "agents",
+                  "notifications"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "string",
+                "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "type",
+        "topics"
       ]
     },
     {
@@ -98,6 +141,10 @@
             {
               "type": "string",
               "pattern": "^task:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "string",
+              "pattern": "^conversation:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
             }
           ]
         },
@@ -144,6 +191,11 @@
           "format": "uuid",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
         "i": {
           "type": "integer",
           "minimum": 0,
@@ -158,6 +210,7 @@
         "type",
         "taskId",
         "callId",
+        "attempt",
         "i",
         "text"
       ]
@@ -172,8 +225,7 @@
         "reason": {
           "type": "string",
           "enum": [
-            "too_old",
-            "server_restart"
+            "too_old"
           ]
         }
       },
@@ -203,7 +255,9 @@
             "budget_refused",
             "method_not_allowed",
             "payload_too_large",
-            "unsupported_media_type"
+            "unsupported_media_type",
+            "runaway_stopped",
+            "empty_output"
           ]
         },
         "message": {

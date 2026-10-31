@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "month"
+            },
+            "key": {
+              "not": {}
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "project",
+                "agent",
+                "task"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ]
+        }
+      ]
+    },
+    "hardCapMicroUsd": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000000
+    },
+    "softCapMicroUsd": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000000
+    }
+  },
+  "required": [
+    "scope",
+    "hardCapMicroUsd"
+  ]
+}

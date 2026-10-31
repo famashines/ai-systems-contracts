@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "conversationId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 20000,
+      "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
+    },
+    "taskId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "newTask": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "conversationId",
+    "text"
+  ]
+}

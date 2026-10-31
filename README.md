@@ -18,15 +18,20 @@ const event = parseEvent(message);
 
 ## Content
 
-| File                   | Content                                                                             |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`          |
-| `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                            |
-| `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted` event, task list result, `TaskStatus`         |
-| `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`          |
-| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`   |
-| `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10) |
-| `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                            |
+| File                   | Content                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`, `Reason`, `ModelId`, `DurationMs`                                                                  |
+| `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                                                                                                                       |
+| `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted`, `RunStarted`, `RunCompleted`, `RunFailed`, `RunBlocked`, `CallRequested`, `MessageRefused`, task list result, `TaskStatus`, `ReplyText` |
+| `src/conversation.ts`  | `PostOwnerMessage` command, `ConversationStarted`, `OwnerMessagePosted`, `AgentReplyPosted`, thread result                                                                     |
+| `src/prompts.ts`       | `CreatePrompt` and `PublishPromptVersion` commands, `PromptCreated`, `PromptVersionPublished`, `PromptRef`, prompt version result                                              |
+| `src/agents.ts`        | agent commands, `AgentCreated`, `AgentVersionPublished`, `AgentVersionActivated`, `AgentEnabled`, `AgentDisabled`, `AgentLimits`, agent list and active version results        |
+| `src/llm.ts`           | `CallStarted`, `CallCompleted`, `CallFailed`, `LlmErrorClass`, `FinishReason`                                                                                                  |
+| `src/budget.ts`        | `SetBudget` command, `budget.*` events, `BudgetScope`, `CapScope`, rpc reserve and settle messages, `RpcSubject`, `BudgetMonthV1`                                              |
+| `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`                                                                                                     |
+| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`, `NoticeDataV1`                                                                              |
+| `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10), `DeltaV1`, `deltaSubject`                                                                 |
+| `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                                                                                                                       |
 
 Generated output: `schemas/` (JSON Schema of each exported schema and of
 each event version) and `docs/events.md` (event reference). Do not edit
@@ -74,6 +79,110 @@ new approval.
   together, not for each message.
 - Ids are lower-case UUID v4 (ADR 0022). Make them with
   `crypto.randomUUID()`.
+- Size: a NATS message has at most 1 MiB. String limits count
+  characters (code points). The worst case is 6 bytes for each character
+  after JSON escaping (control characters), so a 100,000 character text
+  is at most about 600 KB. The messages of `CallRequested` have their own
+  limit: at most 900,000 bytes as UTF-8 JSON (`JSON.stringify(messages)`).
+- Money is an integer number of micro-USD (`MicroUsd`, 1 USD =
+  1,000,000). Convert a provider cost in USD with
+  `Math.round(usd * 1_000_000)`. No schema has a float for money.
+
+## LLM calls
+
+```
+orchestration --orchestration.CallRequested--> ai-proxy
+ai-proxy, for each attempt (model chain, first model first):
+  rpc.budget.reserve --> llm.CallStarted --> deltas --> rpc.budget.settle
+  --> llm.CallCompleted, or llm.CallFailed (with nextModel when one is left)
+```
+
+- ai-proxy reads only `orchestration.CallRequested` from `ORCHESTRATION`
+  (ADR 0023). It has the catalog prices, so it reserves and settles each
+  attempt itself.
+- ai-proxy makes the `reservationId` of each (`callId`, `attempt`) and
+  stores it before it calls `rpc.budget.reserve`. On a redelivery it uses
+  the same id, so a repeated reserve is idempotent and leaves no orphan
+  reservation.
+- A refused reservation gives `llm.CallFailed` with `errorClass`
+  `budget_refused` and the `reservationId` of the refusal.
+- When `CallRequested` has `maxCostMicroUsd` (from `AgentLimits`),
+  ai-proxy refuses an attempt whose worst-case cost is above it, with
+  `llm.CallFailed` `budget_refused`.
+- ai-proxy removes NUL characters from the model output.
+  `CallCompleted.text` refuses NUL.
+- Retryable classes: `rate_limit`, `timeout`, `provider`. Not retryable:
+  `invalid`, `budget_refused`.
+- A call that ends with empty output text gives `orchestration.RunFailed`
+  with the code `empty_output`.
+- `orchestration.RunBlocked` (code `budget_refused` or `runaway_stopped`)
+  puts the task in the state `blocked` until the owner acts.
+
+## Budget rpc
+
+Core NATS request-reply, not in a stream (ADR 0015, ADR 0021). Errors
+come in the `error-code` header of `kit/messaging`.
+
+| Subject              | Request                      | Reply                      |
+| -------------------- | ---------------------------- | -------------------------- |
+| `rpc.budget.reserve` | `ReserveFundsRequestV1`      | `ReserveFundsReplyV1`      |
+| `rpc.budget.settle`  | `SettleReservationRequestV1` | `SettleReservationReplyV1` |
+
+- The caller makes `reservationId` and sends `taskId`, `agentId`,
+  `amountMicroUsd` and `ttlMs` (default 10 minutes). The caller does not
+  choose scopes. Budget finds the scopes that apply, and the month from
+  its own clock in the owner time zone (setting, default Europe/Berlin).
+- A repeated reserve with the same `reservationId` and the same values
+  gives the first answer again. The same `reservationId` with other values
+  gives the error code `conflict`.
+- A refusal is a normal reply with `ok: false`, the refused `scope` and a
+  `reason`.
+- The settle reply has a `state`: `settled`, `already_settled` (with the
+  first booked amount), `expired` (booked at the full reserved amount) or
+  `unknown`.
+- A settle above the reserved amount is booked in full, also when the
+  spend goes over the cap.
+- The month cap (`SetBudget` with scope `{ kind: "month" }`, no key)
+  applies to every month. Spend, reservations and the month view
+  (`BudgetMonthV1`) have the key `YYYY-MM`. Other scopes have an id key.
+- Caps are at most 1,000,000,000,000 micro-USD. A soft cap is not above
+  the hard cap.
+- `BudgetMonthV1.capMicroUsd` is `null` while no cap is set. Budget
+  refuses every reserve while no cap is set.
+- `remainingMicroUsd` is `max(0, cap - spent - reserved)`, and
+  `overCapMicroUsd` is `max(0, spent - cap)`, so the screen can show spend
+  above the cap. With no cap, both are `0`.
+
+## Deltas
+
+ai-proxy publishes each token delta to core NATS (ADR 0019) on
+`deltaSubject(taskId, callId)` (`delta.<taskId>.<callId>`) with a
+`DeltaV1` body `{ attempt, i, text }`. `deltaSubject` accepts only `Id`
+values, so no NATS wildcard can get into the subject. socket-gateway adds
+`type`, `taskId` and `callId` and sends a `delta` server message with the
+same rules.
+
+When `attempt` grows, the client drops the text of the earlier attempt
+and starts again at `i = 0`. The final text comes in the read model.
+
+## Reads
+
+| Read                                  | Served by     | Result                       |
+| ------------------------------------- | ------------- | ---------------------------- |
+| `GET /api/conversations/:id/messages` | projections   | `ConversationThreadResultV1` |
+| budget of the month                   | projections   | `BudgetMonthV1`              |
+| agent list                            | projections   | `AgentListResultV1`          |
+| active agent version by `AgentName`   | agent-manager | `ActiveAgentVersionResultV1` |
+| one prompt version                    | prompt-studio | `PromptVersionResultV1`      |
+
+The thread result pages the same way as the task list: `items` (newest
+first) and `headSeq`, with the query `limit`, `before` (`createdAt` of the
+last item) and `beforeId` (its `messageId`).
+
+`NoticeDataV1` gives the schema of the `data` field of a notice for each
+read model topic: `tasks` (`TaskListItemV1`), `budget` (`BudgetMonthV1`),
+`agents` (`AgentListItemV1`) and `conversation:<id>`
+(`ConversationMessageV1`).
 
 ## Events
 
@@ -120,13 +229,14 @@ subject is not a `<context>.<EventName>` type. It also checks that `type`
 is the subject of `payload.topic`. The header `Nats-Msg-Id`
 is the `eventId`.
 
-| Topic           | Subject              |
-| --------------- | -------------------- |
-| `tasks`         | `view.tasks`         |
-| `task:<id>`     | `view.task.<id>`     |
-| `budget`        | `view.budget`        |
-| `agents`        | `view.agents`        |
-| `notifications` | `view.notifications` |
+| Topic               | Subject                  |
+| ------------------- | ------------------------ |
+| `tasks`             | `view.tasks`             |
+| `task:<id>`         | `view.task.<id>`         |
+| `conversation:<id>` | `view.conversation.<id>` |
+| `budget`            | `view.budget`            |
+| `agents`            | `view.agents`            |
+| `notifications`     | `view.notifications`     |
 
 `viewSubject(topic)` gives the subject. `topicFromSubject(subject)` gives
 the topic, and throws a `ZodError` for a subject that is not in the table.

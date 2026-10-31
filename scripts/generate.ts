@@ -7,8 +7,10 @@ type JsonSchema = {
   type?: string;
   format?: string;
   enum?: unknown[];
+  const?: unknown;
   properties?: Record<string, JsonSchema>;
   required?: string[];
+  oneOf?: JsonSchema[];
 };
 
 const root = new URL("../", import.meta.url);
@@ -26,10 +28,21 @@ for (const [name, value] of Object.entries(contracts)) {
   if (value instanceof z.ZodType) write(`schemas/${name}.json`, toJson(value));
 }
 
-const fieldType = (field: JsonSchema) =>
-  field.enum
-    ? field.enum.map((value) => `\`${JSON.stringify(value)}\``).join(" \\| ")
-    : `${field.type ?? "any"}${field.format ? ` (${field.format})` : ""}`;
+const fieldType = (fields: JsonSchema[]) => {
+  const values = fields.flatMap((field) =>
+    "const" in field ? [field.const] : (field.enum ?? []),
+  );
+  return values.length > 0
+    ? values.map((value) => `\`${JSON.stringify(value)}\``).join(" \\| ")
+    : [
+        ...new Set(
+          fields.map(
+            (field) =>
+              `${field.type ?? field.oneOf?.[0]?.type ?? "any"}${field.format ? ` (${field.format})` : ""}`,
+          ),
+        ),
+      ].join(" \\| ");
+};
 
 const lines = [
   "# Event reference",
@@ -51,6 +64,10 @@ for (const { type, schemaVersion, payload, schema } of eventCatalog) {
     `| \`${type}\` | ${String(schemaVersion)} | ${meaning} | [${file}](../schemas/${file}) |`,
   );
   const json = z.toJSONSchema(payload, { io: "input" }) as JsonSchema;
+  const variants = json.oneOf ?? [json];
+  const keys = new Set(
+    variants.flatMap((variant) => Object.keys(variant.properties ?? {})),
+  );
   sections.push(
     "",
     `## ${type} v${String(schemaVersion)}`,
@@ -59,10 +76,16 @@ for (const { type, schemaVersion, payload, schema } of eventCatalog) {
     "",
     "| Field | Type | Required |",
     "| ----- | ---- | -------- |",
-    ...Object.entries(json.properties ?? {}).map(
-      ([key, field]) =>
-        `| \`${key}\` | ${fieldType(field)} | ${json.required?.includes(key) ? "yes" : "no"} |`,
-    ),
+    ...[...keys].map((key) => {
+      const fields = variants.flatMap((variant) => {
+        const field = variant.properties?.[key];
+        return field && !("not" in field) ? [field] : [];
+      });
+      const required = variants.every((variant) =>
+        variant.required?.includes(key),
+      );
+      return `| \`${key}\` | ${fieldType(fields)} | ${required ? "yes" : "no"} |`;
+    }),
   );
 }
 

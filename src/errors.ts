@@ -13,6 +13,8 @@ export const ErrorCode = z.enum([
   "method_not_allowed",
   "payload_too_large",
   "unsupported_media_type",
+  "runaway_stopped",
+  "empty_output",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
