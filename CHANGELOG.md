@@ -30,14 +30,25 @@ New:
 
 Deploy order:
 
-1. ai-proxy moves to v0.5.0 before orchestration sends `effort` or a
-   `maxTokens` above 16384. On v0.4.1 ai-proxy strips `effort` and refuses
-   `maxTokens` above 16384.
-2. orchestration moves to v0.5.0, then conversation-hub. On v0.4.1
-   conversation-hub strips `model` and `effort`.
-3. api-gateway and projections move to v0.5.0. On v0.4.1 api-gateway
-   strips `model` and `effort` from a message, and projections does not
-   show them in `TaskDetailV1`.
+A model and an effort can come in only through api-gateway, so api-gateway
+moves last of the services. Every reader of `orchestration.>` and
+`conversation.>` must be on v0.5.0 before it. On v0.4.1 a reader strips
+`model` and `effort`, and it cannot decode a `CallRequested` with
+`maxTokens` above 16384: the kit consumer dead-letters that event before
+the handler runs, and no reply goes back.
+
+1. ai-proxy moves to v0.5.0. On v0.4.1 ai-proxy dead-letters a
+   `CallRequested` with `maxTokens` above 16384 (no `llm.*` reply), and
+   strips `effort`.
+2. orchestration, conversation-hub, projections and audit-trace move to
+   v0.5.0, in any order. On v0.4.1 each of them dead-letters the same
+   `CallRequested`, and strips `model` and `effort` (conversation-hub from
+   the message, projections from `TaskDetailV1`, audit-trace from the
+   audit entry). notification also reads `orchestration.>`: move it to
+   v0.5.0 before it is deployed.
+3. api-gateway moves to v0.5.0, after the network policy from api-gateway
+   to ai-proxy. On v0.4.1 api-gateway strips `model` and `effort` from a
+   message and from `TaskDetailV1`.
 4. The app moves to v0.5.0 and sends `model` and `effort` only after
    steps 1 to 3.
 
