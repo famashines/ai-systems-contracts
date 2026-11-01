@@ -2,12 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "string",
   "enum": [
-    "queued",
     "waiting",
+    "queued",
+    "awaiting_approval",
     "running",
     "retrying",
     "blocked",
     "failed",
-    "done"
+    "done",
+    "cancelled",
+    "skipped"
   ]
 }

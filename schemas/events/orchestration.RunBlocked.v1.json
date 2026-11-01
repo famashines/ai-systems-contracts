@@ -79,7 +79,8 @@
           "type": "string",
           "enum": [
             "budget_refused",
-            "runaway_stopped"
+            "runaway_stopped",
+            "subtask_failed"
           ]
         },
         "reason": {
@@ -94,7 +95,7 @@
         "code",
         "reason"
       ],
-      "description": "The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it."
+      "description": "The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a subtask failed."
     }
   },
   "required": [

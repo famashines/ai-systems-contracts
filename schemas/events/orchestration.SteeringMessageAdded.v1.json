@@ -84,15 +84,21 @@
           "type": "string",
           "maxLength": 20000,
           "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
+        },
+        "runId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         }
       },
       "required": [
         "taskId",
         "conversationId",
         "messageId",
-        "text"
+        "text",
+        "runId"
       ],
-      "description": "The owner sent a `steer` message for the task. Running subtasks get it at their next call."
+      "description": "The owner sent a `steer` message during the run. Only subtasks that have not started get it. M3 has no re-plan."
     }
   },
   "required": [

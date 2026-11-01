@@ -136,6 +136,20 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "aggregate",
+            "check",
+            "subtask"
+          ]
+        },
+        "subtaskId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         }
       },
       "required": [
@@ -148,7 +162,7 @@
         "maxTokens",
         "maxDurationMs"
       ],
-      "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt."
+      "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`."
     }
   },
   "required": [

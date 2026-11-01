@@ -22,5 +22,5 @@
     "taskId",
     "runId"
   ],
-  "description": "The owner cancelled the run. Running calls stop and the task ends as `cancelled`."
+  "description": "The owner cancelled the run. `CallCancelRequested` stops the running calls, and the task ends as `cancelled`."
 }

@@ -21,7 +21,8 @@
       "type": "string",
       "enum": [
         "approved",
-        "refused"
+        "refused",
+        "expired"
       ]
     },
     "comment": {
@@ -36,5 +37,5 @@
     "checkpointId",
     "decision"
   ],
-  "description": "The owner approved or refused a checkpoint, with an optional comment."
+  "description": "The owner approved or refused a checkpoint, with an optional comment, or the system closed it at its deadline (`expired`). A refused or expired checkpoint fails its subtask, and the run goes blocked."
 }

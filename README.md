@@ -85,9 +85,20 @@ new approval.
   after JSON escaping (control characters), so a 100,000 character text
   is at most about 600 KB. The messages of `CallRequested` have their own
   limit: at most 900,000 bytes as UTF-8 JSON (`JSON.stringify(messages)`).
-- The subtasks of a plan have at most 200,000 bytes as UTF-8 JSON
-  (`JSON.stringify(subtasks)`), so a plan event and `TaskDetailV1` stay
-  under the NATS limit.
+- The subtasks of a plan event or command (`PlanSubtasks`) have at most
+  200,000 bytes as UTF-8 JSON (`JSON.stringify(subtasks)`). The plan of
+  `TaskDetailV1` has no byte rule, so projections can apply
+  `SubtaskReassigned` to it. Its worst case stays under the NATS limit
+  (a test checks it).
+- New money fields and sums of M3 (estimates, the cost of a call, a
+  subtask or a task) are at most 1,000,000,000,000 micro-USD
+  (`CapMicroUsd`).
+- Rules that are only in zod, not in the generated JSON Schema: the DAG
+  rules of `PlanSubtasks` (unique ids, known dependencies, no cycle), all
+  byte limits, the `subtaskId` and `kind` rule of a call, one checkpoint
+  for each subtask in `TaskDetailV1`, and the pairs of fields that come
+  together. A reader that uses only `schemas/` must check them itself. A
+  test shows that the JSON Schema accepts a cyclic plan.
 - Money is an integer number of micro-USD (`MicroUsd`, 1 USD =
   1,000,000). Convert a provider cost in USD with
   `Math.round(usd * 1_000_000)`. No schema has a float for money.
@@ -101,9 +112,14 @@ ai-proxy, for each attempt (model chain, first model first):
   --> llm.CallCompleted, or llm.CallFailed (with nextModel when one is left)
 ```
 
-- ai-proxy reads only `orchestration.CallRequested` from `ORCHESTRATION`
-  (ADR 0023). It has the catalog prices, so it reserves and settles each
-  attempt itself.
+- ai-proxy reads only `orchestration.CallRequested` and
+  `orchestration.CallCancelRequested` from `ORCHESTRATION`, with two
+  durable consumers, one for each filter subject (ADR 0023 must change).
+  It has the catalog prices, so it reserves and settles each attempt
+  itself.
+- `CallCancelRequested` stops a running call. ai-proxy ends it with
+  `llm.CallFailed` and the class `cancelled` (with the cost so far) and
+  starts no next model. A cancel for a call that has ended does nothing.
 - ai-proxy makes the `reservationId` of each (`callId`, `attempt`) and
   stores it before it calls `rpc.budget.reserve`. On a redelivery it uses
   the same id, so a repeated reserve is idempotent and leaves no orphan
@@ -116,26 +132,72 @@ ai-proxy, for each attempt (model chain, first model first):
 - ai-proxy removes NUL characters from the model output.
   `CallCompleted.text` refuses NUL.
 - Retryable classes: `rate_limit`, `timeout`, `provider`. Not retryable:
-  `invalid`, `budget_refused`.
+  `invalid`, `budget_refused`, `cancelled`.
 - A call that ends with empty output text gives `orchestration.RunFailed`
   with the code `empty_output`.
-- `orchestration.RunBlocked` (code `budget_refused` or `runaway_stopped`)
-  puts the task in the state `blocked` until the owner acts.
+- `orchestration.RunBlocked` (code `budget_refused`, `runaway_stopped` or
+  `subtask_failed`) puts the task in the state `blocked` until the owner
+  acts.
+- `CallRequested` has an optional `kind` (`plan`, `aggregate`, `check`,
+  `subtask`) and a `subtaskId` for the kind `subtask`. M2 calls have no
+  `kind`.
+- After the final outcome of each call (`llm.CallCompleted`, or
+  `llm.CallFailed` with no `nextModel`), orchestration appends
+  `CallSettled` to the task stream: the kind, the totals of all attempts,
+  and the output text. So orchestration rebuilds the results and the cost
+  of a task from `task-<id>` only (ARCHITECTURE 7). The cost of a task is
+  the sum of its `CallSettled` costs.
 
 ## Tasks and plans
 
 ```
-TaskSubmitted --> ClarificationRequested <--> ClarificationAnswered
+TaskSubmitted --> (ClarificationRequested --> ClarificationAnswered)
   --> PlanProposed --> (PlanEdited)* --> PlanApproved | PlanRejected
   --> RunStarted --> for each subtask:
         (SubtaskWaiting) --> SubtaskQueued --> (CheckpointOpened
         --> CheckpointResolved) --> SubtaskStarted --> SubtaskCompleted
         or SubtaskFailed --> SubtaskRetrying --> SubtaskStarted
-        or SubtaskBlocked
+        or SubtaskFailed (last try) or SubtaskBlocked --> RunBlocked
+  --> CallSettled after each call
   --> RunCompleted | RunFailed | RunCancelled
-owner at any time of the run: RunPaused, RunResumed, SubtaskReassigned,
-  SubtaskQueued (retry), TaskModeChanged, SteeringMessageAdded
+before a run: TaskCancelled
 ```
+
+Status after each event. `-` means no change. `TaskDetailV1` shows both.
+
+| Event                                       | Task status                         | Subtask status                                                                              |
+| ------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| `TaskSubmitted`                             | `submitted`                         | -                                                                                           |
+| `ClarificationRequested`                    | `clarifying`                        | -                                                                                           |
+| `ClarificationAnswered`                     | `planning`                          | -                                                                                           |
+| `PlanProposed`, `awaitsApproval` true       | `awaiting_approval`                 | -                                                                                           |
+| `PlanProposed`, `awaitsApproval` false      | `planning` (`PlanApproved` follows) | -                                                                                           |
+| `PlanEdited`                                | `awaiting_approval`                 | -                                                                                           |
+| `PlanApproved`                              | - (`RunStarted` follows)            | -                                                                                           |
+| `PlanRejected`                              | `rejected`                          | -                                                                                           |
+| `TaskCancelled`                             | `cancelled`                         | -                                                                                           |
+| `RunStarted`                                | `running`                           | -                                                                                           |
+| `SubtaskWaiting`                            | -                                   | `waiting`                                                                                   |
+| `SubtaskQueued`                             | -                                   | `queued`                                                                                    |
+| `CheckpointOpened`                          | -                                   | `awaiting_approval`                                                                         |
+| `CheckpointResolved` `approved`             | -                                   | `queued`                                                                                    |
+| `CheckpointResolved` `refused` or `expired` | - (`SubtaskFailed` follows)         | -                                                                                           |
+| `SubtaskStarted`                            | -                                   | `running`                                                                                   |
+| `SubtaskCompleted`                          | -                                   | `done`                                                                                      |
+| `SubtaskFailed`                             | -                                   | `failed`                                                                                    |
+| `SubtaskRetrying`                           | -                                   | `retrying`                                                                                  |
+| `SubtaskBlocked`                            | - (`RunBlocked` follows)            | `blocked`                                                                                   |
+| `SubtaskReassigned`                         | -                                   | -                                                                                           |
+| `RunPaused`                                 | `paused`                            | -                                                                                           |
+| `RunResumed`                                | `running`                           | -                                                                                           |
+| `RunBlocked`                                | `blocked`                           | -                                                                                           |
+| `RunCompleted`                              | `completed`                         | -                                                                                           |
+| `RunFailed`, `RunCancelled`                 | `failed`, `cancelled`               | `running`, `queued`, `retrying`, `awaiting_approval` to `cancelled`; `waiting` to `skipped` |
+
+No status change: `TaskModeChanged`, `SteeringMessageAdded`,
+`CallRequested`, `CallSettled`, `CallCancelRequested`, `MessageRefused`.
+
+Rules:
 
 - A plan has 1 to 20 subtasks. Each `subtaskId` comes once. Each id in
   `dependsOn` is another subtask of the plan, and the dependencies have no
@@ -146,32 +208,66 @@ owner at any time of the run: RunPaused, RunResumed, SubtaskReassigned,
   `PlanEdited`. `ApprovePlan`, `EditPlan` and `RejectPlan` name the version
   that the owner saw. A command for an older version gives `conflict`.
 - `PlanEdited` and `EditPlan` carry the full plan. The app makes the
-  `subtaskId` of a new subtask with `crypto.randomUUID()`.
+  `subtaskId` of a new subtask with `crypto.randomUUID()`. Orchestration
+  makes its own estimates and ignores the estimates in `EditPlan`.
+- A task with no `conversationId` (from `POST /api/tasks`) never asks
+  questions, because the answers come only through a thread.
+- `SubtaskWaiting` is a wait for dependencies only. A wait for the owner
+  is `CheckpointOpened` (ARCHITECTURE 6 and 8.1 must change).
 - A subtask with `needsApproval` opens a checkpoint before it starts.
+  Orchestration writes the `reason`: `Approval needed for <subtask
+title>`. A checkpoint with a `deadline` expires at that time
+  (`CheckpointResolved` `expired`, actor `system`). A refused or expired
+  checkpoint gives `SubtaskFailed` for that subtask (code `forbidden`, the
+  `tryNumber` of the try that did not start, 0 tokens and cost), then
+  `RunBlocked` (`subtask_failed`).
 - `tryNumber` counts the tries of a subtask, from 1. Each try is one
   `CallRequested` with a new `callId`. The `attempt` of `llm.*` is one model
-  of the chain inside one try.
-- Answers and steering come only through the conversation (ADR 0021):
-  `OwnerMessagePosted` with the intent `answer` gives
+  of the chain inside one try. After the last try fails, the subtask is
+  `failed` and `RunBlocked` (`subtask_failed`) follows.
+- `SubtaskBlocked` is followed by `RunBlocked` with the same code.
+  Running calls of other subtasks finish, and no new call starts.
+- `RetrySubtask` of a failed or blocked subtask gives `SubtaskQueued`, and
+  the count of tries starts again at 1. When the task is `blocked`,
+  `RunResumed` follows in the same append. `ResumeRun` of a `blocked`
+  task gives `RunResumed` and `SubtaskQueued` for each blocked subtask.
+- `RunCancelled` and `RunFailed` give `CallCancelRequested` for each
+  running call.
+- `TaskCancelled` (command `CancelTask`) ends a task that has no run:
+  `submitted`, `clarifying` or `planning`. In `awaiting_approval` the
+  owner rejects the plan. `CancelRun` ends a task with a run.
+- `TaskDetailV1.checkpoints` has only the latest checkpoint of each
+  subtask.
+- Answers and steering come only through the conversation (ADR 0021,
+  ARCHITECTURE 3). `OwnerMessagePosted` with the intent `answer` gives
   `ClarificationAnswered`, `steer` gives `SteeringMessageAdded`, or
-  `MessageRefused` when the task cannot take it.
-- `PostOwnerMessage` has an optional `mode`. conversation-hub copies it
-  into `OwnerMessagePosted` only for `new_task`. Absent means `approval`.
+  `MessageRefused` when the task cannot take it. A steer comes only during
+  a run (`SteeringMessageAdded` has `runId`). Before the run, a message is
+  an answer or it is refused. A steer reaches only the subtasks that have
+  not started. M3 has no re-plan.
+- `PostOwnerMessage` has an optional `mode`, and a message with a `taskId`
+  has no `mode`. conversation-hub copies it into `OwnerMessagePosted` only
+  for `new_task`. Absent means `approval`.
 
 Owner commands (M3-04). The command `type` is `orchestration.<Name>`.
+A money command can start or allow LLM calls. By ADR 0028, orchestration
+checks the owner token for it (role `owner`, `actor.id` is the `sub`), and
+api-gateway forwards `Authorization` on its route (ADR 0028 must name
+these commands).
 
-| Command             | Payload                             | Event                                         |
-| ------------------- | ----------------------------------- | --------------------------------------------- |
-| `ApprovePlan`       | `ApprovePlanCommandPayloadV1`       | `PlanApproved`                                |
-| `EditPlan`          | `EditPlanCommandPayloadV1`          | `PlanEdited`                                  |
-| `RejectPlan`        | `RejectPlanCommandPayloadV1`        | `PlanRejected`                                |
-| `PauseRun`          | `PauseRunCommandPayloadV1`          | `RunPaused`                                   |
-| `ResumeRun`         | `ResumeRunCommandPayloadV1`         | `RunResumed`                                  |
-| `CancelRun`         | `CancelRunCommandPayloadV1`         | `RunCancelled`                                |
-| `RetrySubtask`      | `RetrySubtaskCommandPayloadV1`      | `SubtaskQueued` (a failed or blocked subtask) |
-| `ReassignSubtask`   | `ReassignSubtaskCommandPayloadV1`   | `SubtaskReassigned`                           |
-| `SetTaskMode`       | `SetTaskModeCommandPayloadV1`       | `TaskModeChanged`                             |
-| `ResolveCheckpoint` | `ResolveCheckpointCommandPayloadV1` | `CheckpointResolved`                          |
+| Command             | Payload                             | Event                                               | Money                   |
+| ------------------- | ----------------------------------- | --------------------------------------------------- | ----------------------- |
+| `ApprovePlan`       | `ApprovePlanCommandPayloadV1`       | `PlanApproved`                                      | yes                     |
+| `EditPlan`          | `EditPlanCommandPayloadV1`          | `PlanEdited`                                        | yes                     |
+| `RejectPlan`        | `RejectPlanCommandPayloadV1`        | `PlanRejected`                                      | no                      |
+| `PauseRun`          | `PauseRunCommandPayloadV1`          | `RunPaused`                                         | no                      |
+| `ResumeRun`         | `ResumeRunCommandPayloadV1`         | `RunResumed`                                        | yes                     |
+| `CancelRun`         | `CancelRunCommandPayloadV1`         | `RunCancelled`                                      | no                      |
+| `CancelTask`        | `CancelTaskCommandPayloadV1`        | `TaskCancelled`                                     | no                      |
+| `RetrySubtask`      | `RetrySubtaskCommandPayloadV1`      | `SubtaskQueued` (a failed or blocked subtask)       | yes                     |
+| `ReassignSubtask`   | `ReassignSubtaskCommandPayloadV1`   | `SubtaskReassigned`                                 | yes                     |
+| `SetTaskMode`       | `SetTaskModeCommandPayloadV1`       | `TaskModeChanged`                                   | yes for `auto`, else no |
+| `ResolveCheckpoint` | `ResolveCheckpointCommandPayloadV1` | `CheckpointResolved` (`approved` or `refused` only) | yes                     |
 
 Each command event has the owner as `actor`, so audit-trace gets who did
 what and when from the event (ARCHITECTURE 11.1).
@@ -180,9 +276,10 @@ what and when from the event (ARCHITECTURE 11.1).
 
 - The app registers its FCM token through api-gateway with
   `notification.RegisterDevice` (`deviceId`, `platform` `android`,
-  `token`). The app makes `deviceId` once with `crypto.randomUUID()` and
-  sends it again when the token changes. It sends
-  `notification.UnregisterDevice` at sign-out.
+  `token`, `locale` `en`, `de` or `ur`). notification writes the push
+  title in that language. The app makes `deviceId` once with
+  `crypto.randomUUID()` and sends it again when the token or the language
+  changes. It sends `notification.UnregisterDevice` at sign-out.
 - The token is a secret of the device. No event and no log has it.
   notification keeps it only in its `devices` collection.
 - The data of a push is `PushDataV1`: `kind` (`completed`, `failed`,
@@ -262,11 +359,16 @@ Only an empty page is the end of the thread. Do not use
 `TaskDetailV1` is one document for each task: the task, the current plan
 (`plan`, a DAG through `dependsOn`), the state of each subtask of the
 current run (`subtasks`, with the start and end times for the timeline),
-the checkpoints and the cost. `plan.subtasks` shows the current agent and
-model of each subtask: projections applies `SubtaskReassigned` to it. It
-has no long text, so it stays under the NATS limit. The output text of a subtask and the result of the run are
-`TaskOutputV1` reads. The app reads the output again when a subtask
-becomes `done`, and drops the delta text of that call (ADR 0019).
+the latest checkpoint of each subtask and the cost. `plan.subtasks` shows
+the current agent and model of each subtask: projections applies
+`SubtaskReassigned` to it. `currentCall` (`callId`, `kind`, and
+`subtaskId` for a subtask call) is the latest call that runs, or `null`.
+With it the app tells an orchestrator call (`plan`, `aggregate`, `check`)
+from a subtask call. Parallel subtask calls are in `subtasks[].callId`.
+It has no long text, so it stays under the NATS limit. The output text of
+a subtask and the result of the run are `TaskOutputV1` reads. The app
+reads the output again when a subtask becomes `done`, and drops the delta
+text of that call (ADR 0019).
 
 `NoticeDataV1` gives the schema of the `data` field of a notice for each
 read model topic: `tasks` (`TaskListItemV1`), `task:<id>`

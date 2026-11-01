@@ -122,7 +122,7 @@
               "estimatedCostMicroUsd": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 9007199254740991
+                "maximum": 1000000000000
               },
               "estimatedDurationMs": {
                 "type": "integer",
@@ -139,14 +139,18 @@
               "needsApproval"
             ]
           }
+        },
+        "awaitsApproval": {
+          "type": "boolean"
         }
       },
       "required": [
         "taskId",
         "planVersion",
-        "subtasks"
+        "subtasks",
+        "awaitsApproval"
       ],
-      "description": "A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task."
+      "description": "A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task. `awaitsApproval` is false in auto mode, where `PlanApproved` follows."
     }
   },
   "required": [

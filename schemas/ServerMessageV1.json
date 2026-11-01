@@ -257,7 +257,8 @@
             "payload_too_large",
             "unsupported_media_type",
             "runaway_stopped",
-            "empty_output"
+            "empty_output",
+            "subtask_failed"
           ]
         },
         "message": {

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "callId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "aggregate",
+        "check",
+        "subtask"
+      ]
+    },
+    "subtaskId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "inputTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "outputTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "costMicroUsd": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000000
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 100000,
+      "pattern": "^[^\\0]*$"
+    }
+  },
+  "required": [
+    "taskId",
+    "callId",
+    "kind",
+    "inputTokens",
+    "outputTokens",
+    "costMicroUsd"
+  ],
+  "description": "A call of the task has its final outcome: completed, failed or cancelled. Tokens and cost are the totals of all its attempts, and `text` is its output when it gave one. The cost of the task is the sum of these costs."
+}

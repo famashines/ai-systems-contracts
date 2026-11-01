@@ -7,6 +7,7 @@ export const LlmErrorClass = z.enum([
   "provider",
   "invalid",
   "budget_refused",
+  "cancelled",
 ]);
 export type LlmErrorClass = z.infer<typeof LlmErrorClass>;
 

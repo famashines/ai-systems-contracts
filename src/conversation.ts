@@ -16,7 +16,11 @@ export const PostOwnerMessageCommandPayloadV1 = z
   .refine((message) => !(message.newTask && message.taskId !== undefined), {
     message: "A new task has no taskId",
     path: ["taskId"],
-  });
+  })
+  .refine(
+    (message) => !(message.mode !== undefined && message.taskId !== undefined),
+    { message: "A message with a taskId has no mode", path: ["mode"] },
+  );
 export type PostOwnerMessageCommandPayloadV1 = z.infer<
   typeof PostOwnerMessageCommandPayloadV1
 >;

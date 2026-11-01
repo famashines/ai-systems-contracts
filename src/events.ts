@@ -47,6 +47,9 @@ import {
   RunCancelledEventPayloadV1,
   TaskModeChangedEventPayloadV1,
   SteeringMessageAddedEventPayloadV1,
+  TaskCancelledEventPayloadV1,
+  CallSettledEventPayloadV1,
+  CallCancelRequestedEventPayloadV1,
   CallRequestedEventPayloadV1,
   MessageRefusedEventPayloadV1,
   RunCompletedEventPayloadV1,
@@ -132,6 +135,13 @@ export const eventRegistry = Object.freeze({
   }),
   "orchestration.SteeringMessageAdded": Object.freeze({
     1: SteeringMessageAddedEventPayloadV1,
+  }),
+  "orchestration.TaskCancelled": Object.freeze({
+    1: TaskCancelledEventPayloadV1,
+  }),
+  "orchestration.CallSettled": Object.freeze({ 1: CallSettledEventPayloadV1 }),
+  "orchestration.CallCancelRequested": Object.freeze({
+    1: CallCancelRequestedEventPayloadV1,
   }),
   "conversation.ConversationStarted": Object.freeze({
     1: ConversationStartedEventPayloadV1,

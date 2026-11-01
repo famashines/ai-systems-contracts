@@ -86,7 +86,7 @@
         "runId",
         "subtaskId"
       ],
-      "description": "The subtask waits for its dependencies. A wait for the owner is `CheckpointOpened`."
+      "description": "The subtask waits for its dependencies. It is not a wait for the owner: that is `CheckpointOpened`."
     }
   },
   "required": [

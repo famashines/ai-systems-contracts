@@ -92,7 +92,8 @@
             "timeout",
             "provider",
             "invalid",
-            "budget_refused"
+            "budget_refused",
+            "cancelled"
           ]
         },
         "reason": {
