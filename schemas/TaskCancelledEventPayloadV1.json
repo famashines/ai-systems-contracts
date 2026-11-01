@@ -16,5 +16,5 @@
   "required": [
     "taskId"
   ],
-  "description": "The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). The task ends as `cancelled`."
+  "description": "The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). `CallCancelRequested` stops the running orchestrator call, and the task ends as `cancelled`."
 }

@@ -130,6 +130,21 @@
           "type": "string",
           "format": "uuid",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "callInputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "callOutputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "callCostMicroUsd": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000000
         }
       },
       "required": [
@@ -141,7 +156,7 @@
         "reason",
         "costMicroUsd"
       ],
-      "description": "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed."
+      "description": "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. The final attempt has the totals of all attempts of the call (`callInputTokens`, `callOutputTokens`, `callCostMicroUsd`)."
     }
   },
   "required": [

@@ -17,5 +17,5 @@
     "taskId",
     "callId"
   ],
-  "description": "Orchestration asks ai-proxy to stop a running call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`."
+  "description": "Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve."
 }

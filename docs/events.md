@@ -10,7 +10,7 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | `orchestration.RunStarted` | 1 | Execution of the approved plan starts. | [events/orchestration.RunStarted.v1.json](../schemas/events/orchestration.RunStarted.v1.json) |
 | `orchestration.RunCompleted` | 1 | The run ended with a result summary and the cost of the attempt that gave it. | [events/orchestration.RunCompleted.v1.json](../schemas/events/orchestration.RunCompleted.v1.json) |
 | `orchestration.RunFailed` | 1 | The run ended with no result, with a code and a plain reason. | [events/orchestration.RunFailed.v1.json](../schemas/events/orchestration.RunFailed.v1.json) |
-| `orchestration.RunBlocked` | 1 | The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a subtask failed. | [events/orchestration.RunBlocked.v1.json](../schemas/events/orchestration.RunBlocked.v1.json) |
+| `orchestration.RunBlocked` | 1 | The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed. | [events/orchestration.RunBlocked.v1.json](../schemas/events/orchestration.RunBlocked.v1.json) |
 | `orchestration.CallRequested` | 1 | A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`. | [events/orchestration.CallRequested.v1.json](../schemas/events/orchestration.CallRequested.v1.json) |
 | `orchestration.MessageRefused` | 1 | A `steer` or `answer` message for a task that cannot take it, with the reason. | [events/orchestration.MessageRefused.v1.json](../schemas/events/orchestration.MessageRefused.v1.json) |
 | `orchestration.ClarificationRequested` | 1 | The orchestrator needs answers before it plans. Only a task with a `conversationId` asks questions. | [events/orchestration.ClarificationRequested.v1.json](../schemas/events/orchestration.ClarificationRequested.v1.json) |
@@ -34,17 +34,17 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | `orchestration.RunCancelled` | 1 | The owner cancelled the run. `CallCancelRequested` stops the running calls, and the task ends as `cancelled`. | [events/orchestration.RunCancelled.v1.json](../schemas/events/orchestration.RunCancelled.v1.json) |
 | `orchestration.TaskModeChanged` | 1 | The owner changed the mode of the task: `auto` or `approval`. | [events/orchestration.TaskModeChanged.v1.json](../schemas/events/orchestration.TaskModeChanged.v1.json) |
 | `orchestration.SteeringMessageAdded` | 1 | The owner sent a `steer` message during the run. Only subtasks that have not started get it. M3 has no re-plan. | [events/orchestration.SteeringMessageAdded.v1.json](../schemas/events/orchestration.SteeringMessageAdded.v1.json) |
-| `orchestration.TaskCancelled` | 1 | The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). The task ends as `cancelled`. | [events/orchestration.TaskCancelled.v1.json](../schemas/events/orchestration.TaskCancelled.v1.json) |
+| `orchestration.TaskCancelled` | 1 | The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). `CallCancelRequested` stops the running orchestrator call, and the task ends as `cancelled`. | [events/orchestration.TaskCancelled.v1.json](../schemas/events/orchestration.TaskCancelled.v1.json) |
 | `orchestration.CallSettled` | 1 | A call of the task has its final outcome: completed, failed or cancelled. Tokens and cost are the totals of all its attempts, and `text` is its output when it gave one. The cost of the task is the sum of these costs. | [events/orchestration.CallSettled.v1.json](../schemas/events/orchestration.CallSettled.v1.json) |
-| `orchestration.CallCancelRequested` | 1 | Orchestration asks ai-proxy to stop a running call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. | [events/orchestration.CallCancelRequested.v1.json](../schemas/events/orchestration.CallCancelRequested.v1.json) |
+| `orchestration.CallCancelRequested` | 1 | Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve. | [events/orchestration.CallCancelRequested.v1.json](../schemas/events/orchestration.CallCancelRequested.v1.json) |
 | `conversation.ConversationStarted` | 1 | A new chat thread. | [events/conversation.ConversationStarted.v1.json](../schemas/events/conversation.ConversationStarted.v1.json) |
 | `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
 | `conversation.AgentReplyPosted` | 1 | An agent reply in a thread, made from the orchestration event `sourceEventId`. | [events/conversation.AgentReplyPosted.v1.json](../schemas/events/conversation.AgentReplyPosted.v1.json) |
 | `prompts.PromptCreated` | 1 | A new prompt. | [events/prompts.PromptCreated.v1.json](../schemas/events/prompts.PromptCreated.v1.json) |
 | `prompts.PromptVersionPublished` | 1 | A new immutable version of a prompt, with its variables. | [events/prompts.PromptVersionPublished.v1.json](../schemas/events/prompts.PromptVersionPublished.v1.json) |
 | `llm.CallStarted` | 1 | One attempt of a call starts on one model, with its own reservation. | [events/llm.CallStarted.v1.json](../schemas/events/llm.CallStarted.v1.json) |
-| `llm.CallCompleted` | 1 | The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response. | [events/llm.CallCompleted.v1.json](../schemas/events/llm.CallCompleted.v1.json) |
-| `llm.CallFailed` | 1 | One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. | [events/llm.CallFailed.v1.json](../schemas/events/llm.CallFailed.v1.json) |
+| `llm.CallCompleted` | 1 | The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response. `callInputTokens`, `callOutputTokens` and `callCostMicroUsd` are the totals of all attempts of the call. | [events/llm.CallCompleted.v1.json](../schemas/events/llm.CallCompleted.v1.json) |
+| `llm.CallFailed` | 1 | One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. The final attempt has the totals of all attempts of the call (`callInputTokens`, `callOutputTokens`, `callCostMicroUsd`). | [events/llm.CallFailed.v1.json](../schemas/events/llm.CallFailed.v1.json) |
 | `budget.BudgetSet` | 1 | A cap for a scope: a hard amount and an optional soft amount. The month cap applies to every month. | [events/budget.BudgetSet.v1.json](../schemas/events/budget.BudgetSet.v1.json) |
 | `budget.FundsReserved` | 1 | Money is held for a call. Answer to `rpc.budget.reserve`. | [events/budget.FundsReserved.v1.json](../schemas/events/budget.FundsReserved.v1.json) |
 | `budget.ReservationRefused` | 1 | A scope has no room for the call. Answer to `rpc.budget.reserve`. | [events/budget.ReservationRefused.v1.json](../schemas/events/budget.ReservationRefused.v1.json) |
@@ -102,13 +102,13 @@ The run ended with no result, with a code and a plain reason.
 
 ## orchestration.RunBlocked v1
 
-The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a subtask failed.
+The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
 | `taskId` | string (uuid) | yes |
 | `runId` | string (uuid) | yes |
-| `code` | `"budget_refused"` \| `"runaway_stopped"` \| `"subtask_failed"` | yes |
+| `code` | `"budget_refused"` \| `"runaway_stopped"` \| `"forbidden"` \| `"subtask_failed"` | yes |
 | `reason` | string | yes |
 
 ## orchestration.CallRequested v1
@@ -378,7 +378,7 @@ The owner sent a `steer` message during the run. Only subtasks that have not sta
 
 ## orchestration.TaskCancelled v1
 
-The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). The task ends as `cancelled`.
+The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). `CallCancelRequested` stops the running orchestrator call, and the task ends as `cancelled`.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -402,7 +402,7 @@ A call of the task has its final outcome: completed, failed or cancelled. Tokens
 
 ## orchestration.CallCancelRequested v1
 
-Orchestration asks ai-proxy to stop a running call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`.
+Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -479,7 +479,7 @@ One attempt of a call starts on one model, with its own reservation.
 
 ## llm.CallCompleted v1
 
-The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response.
+The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response. `callInputTokens`, `callOutputTokens` and `callCostMicroUsd` are the totals of all attempts of the call.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -495,10 +495,13 @@ The call is done: output text, tokens, cost in micro-USD, latency, and the id of
 | `costMicroUsd` | integer | yes |
 | `latencyMs` | integer | yes |
 | `bodyId` | string (uuid) | yes |
+| `callInputTokens` | integer | no |
+| `callOutputTokens` | integer | no |
+| `callCostMicroUsd` | integer | no |
 
 ## llm.CallFailed v1
 
-One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed.
+One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. The final attempt has the totals of all attempts of the call (`callInputTokens`, `callOutputTokens`, `callCostMicroUsd`).
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -514,6 +517,9 @@ One attempt failed. `nextModel` is the next model of the fallback chain; absent 
 | `outputTokens` | integer | no |
 | `bodyId` | string (uuid) | no |
 | `reservationId` | string (uuid) | no |
+| `callInputTokens` | integer | no |
+| `callOutputTokens` | integer | no |
+| `callCostMicroUsd` | integer | no |
 
 ## budget.BudgetSet v1
 

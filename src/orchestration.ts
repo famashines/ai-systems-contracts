@@ -120,12 +120,13 @@ export const RunBlockedEventPayloadV1 = z
     code: ErrorCode.extract([
       "budget_refused",
       "runaway_stopped",
+      "forbidden",
       "subtask_failed",
     ]),
     reason: Reason,
   })
   .describe(
-    "The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a subtask failed.",
+    "The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed.",
   );
 export type RunBlockedEventPayloadV1 = z.infer<typeof RunBlockedEventPayloadV1>;
 
@@ -514,7 +515,7 @@ export type RunCancelledEventPayloadV1 = z.infer<
 export const TaskCancelledEventPayloadV1 = z
   .object({ taskId: Id, reason: Reason.exactOptional() })
   .describe(
-    "The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). The task ends as `cancelled`.",
+    "The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). `CallCancelRequested` stops the running orchestrator call, and the task ends as `cancelled`.",
   );
 export type TaskCancelledEventPayloadV1 = z.infer<
   typeof TaskCancelledEventPayloadV1
@@ -547,7 +548,7 @@ export type CallSettledEventPayloadV1 = z.infer<
 export const CallCancelRequestedEventPayloadV1 = z
   .object({ taskId: Id, callId: Id })
   .describe(
-    "Orchestration asks ai-proxy to stop a running call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`.",
+    "Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve.",
   );
 export type CallCancelRequestedEventPayloadV1 = z.infer<
   typeof CallCancelRequestedEventPayloadV1
@@ -666,13 +667,10 @@ export const CheckpointV1 = z.object({
 });
 export type CheckpointV1 = z.infer<typeof CheckpointV1>;
 
-export const CallRef = z
-  .object({
-    callId: Id,
-    kind: CallKind,
-    subtaskId: Id.exactOptional(),
-  })
-  .refine(subtaskOfKind, subtaskOfKindRule);
+export const CallRef = z.object({
+  callId: Id,
+  kind: CallKind.exclude(["subtask"]),
+});
 export type CallRef = z.infer<typeof CallRef>;
 
 export const TaskDetailV1 = z.object({

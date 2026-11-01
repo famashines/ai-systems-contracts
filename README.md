@@ -95,7 +95,8 @@ new approval.
   (`CapMicroUsd`).
 - Rules that are only in zod, not in the generated JSON Schema: the DAG
   rules of `PlanSubtasks` (unique ids, known dependencies, no cycle), all
-  byte limits, the `subtaskId` and `kind` rule of a call, one checkpoint
+  byte limits, the `subtaskId` and `kind` rule of a call, the call totals
+  rule of `llm.*`, one checkpoint
   for each subtask in `TaskDetailV1`, and the pairs of fields that come
   together. A reader that uses only `schemas/` must check them itself. A
   test shows that the JSON Schema accepts a cyclic plan.
@@ -120,6 +121,15 @@ ai-proxy, for each attempt (model chain, first model first):
 - `CallCancelRequested` stops a running call. ai-proxy ends it with
   `llm.CallFailed` and the class `cancelled` (with the cost so far) and
   starts no next model. A cancel for a call that has ended does nothing.
+- ai-proxy stores each `CallCancelRequested` by `callId`. The two
+  consumers do not keep an order between them, so a cancel can come before
+  its `CallRequested`. ai-proxy answers a later `CallRequested` for that
+  `callId` with `llm.CallFailed` `cancelled`, cost 0, and sends no reserve.
+- The final attempt of a call (`llm.CallCompleted`, or `llm.CallFailed`
+  with no `nextModel`) has `callInputTokens`, `callOutputTokens` and
+  `callCostMicroUsd`: the totals of all attempts of the call. ai-proxy sets
+  them from its `attempts` collection. They come together, and an attempt
+  with a `nextModel` has none.
 - ai-proxy makes the `reservationId` of each (`callId`, `attempt`) and
   stores it before it calls `rpc.budget.reserve`. On a redelivery it uses
   the same id, so a repeated reserve is idempotent and leaves no orphan
@@ -135,16 +145,17 @@ ai-proxy, for each attempt (model chain, first model first):
   `invalid`, `budget_refused`, `cancelled`.
 - A call that ends with empty output text gives `orchestration.RunFailed`
   with the code `empty_output`.
-- `orchestration.RunBlocked` (code `budget_refused`, `runaway_stopped` or
-  `subtask_failed`) puts the task in the state `blocked` until the owner
-  acts.
+- `orchestration.RunBlocked` (code `budget_refused`, `runaway_stopped`,
+  `forbidden` or `subtask_failed`) puts the task in the state `blocked`
+  until the owner acts.
 - `CallRequested` has an optional `kind` (`plan`, `aggregate`, `check`,
   `subtask`) and a `subtaskId` for the kind `subtask`. M2 calls have no
   `kind`.
 - After the final outcome of each call (`llm.CallCompleted`, or
   `llm.CallFailed` with no `nextModel`), orchestration appends
-  `CallSettled` to the task stream: the kind, the totals of all attempts,
-  and the output text. So orchestration rebuilds the results and the cost
+  `CallSettled` to the task stream: the kind, the call totals of the final
+  attempt (`callInputTokens`, `callOutputTokens`, `callCostMicroUsd`), and
+  the output text. So orchestration rebuilds the results and the cost
   of a task from `task-<id>` only (ARCHITECTURE 7). The cost of a task is
   the sum of its `CallSettled` costs.
 
@@ -229,10 +240,14 @@ title>`. A checkpoint with a `deadline` expires at that time
   Running calls of other subtasks finish, and no new call starts.
 - `RetrySubtask` of a failed or blocked subtask gives `SubtaskQueued`, and
   the count of tries starts again at 1. When the task is `blocked`,
-  `RunResumed` follows in the same append. `ResumeRun` of a `blocked`
-  task gives `RunResumed` and `SubtaskQueued` for each blocked subtask.
+  `RunResumed` follows in the same append. `ResumeRun` of a task that is
+  `blocked` with `budget_refused`, `runaway_stopped` or `forbidden` gives
+  `RunResumed` and `SubtaskQueued` for each blocked subtask. `ResumeRun`
+  of a task that is `blocked` with `subtask_failed` gives `conflict`: the
+  owner uses `RetrySubtask`.
 - `RunCancelled` and `RunFailed` give `CallCancelRequested` for each
-  running call.
+  running call. `TaskCancelled` gives `CallCancelRequested` for the
+  running orchestrator call (for example a `plan` call), when there is one.
 - `TaskCancelled` (command `CancelTask`) ends a task that has no run:
   `submitted`, `clarifying` or `planning`. In `awaiting_approval` the
   owner rejects the plan. `CancelRun` ends a task with a run.
@@ -286,6 +301,18 @@ what and when from the event (ARCHITECTURE 11.1).
   `approval_needed`, `budget`) and `taskId` (not for `budget`). All values
   are strings, as FCM data needs. A push has no prompt and no output text
   (ADR 0013).
+
+| Event                                                   | `PushKind`        |
+| ------------------------------------------------------- | ----------------- |
+| `orchestration.RunCompleted`                            | `completed`       |
+| `orchestration.RunFailed`                               | `failed`          |
+| `orchestration.RunBlocked` with `subtask_failed`        | `failed`          |
+| `orchestration.PlanProposed` with `awaitsApproval` true | `approval_needed` |
+| `orchestration.CheckpointOpened`                        | `approval_needed` |
+| `budget.ThresholdCrossed`                               | `budget`          |
+| `orchestration.RunBlocked` with `budget_refused`        | `budget`          |
+
+Other events give no push.
 
 ## Budget rpc
 
@@ -361,10 +388,11 @@ Only an empty page is the end of the thread. Do not use
 current run (`subtasks`, with the start and end times for the timeline),
 the latest checkpoint of each subtask and the cost. `plan.subtasks` shows
 the current agent and model of each subtask: projections applies
-`SubtaskReassigned` to it. `currentCall` (`callId`, `kind`, and
-`subtaskId` for a subtask call) is the latest call that runs, or `null`.
-With it the app tells an orchestrator call (`plan`, `aggregate`, `check`)
-from a subtask call. Parallel subtask calls are in `subtasks[].callId`.
+`SubtaskReassigned` to it. `currentCall` (`callId`, `kind`) is the
+orchestrator call that runs (`plan`, `aggregate` or `check`), or `null`.
+It is never a subtask call: the schema refuses the kind `subtask` there.
+Subtask calls are in `subtasks[].callId`. So the app tells an
+orchestrator call from a subtask call.
 It has no long text, so it stays under the NATS limit. The output text of
 a subtask and the result of the run are `TaskOutputV1` reads. The app
 reads the output again when a subtask becomes `done`, and drops the delta

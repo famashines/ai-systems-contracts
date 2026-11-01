@@ -265,6 +265,11 @@ const failed = {
   costMicroUsd: 0,
   nextModel: "anthropic/claude-haiku-4.5",
 };
+const totals = {
+  callInputTokens: 240,
+  callOutputTokens: 40,
+  callCostMicroUsd: 1_000_000_000_000,
+};
 const reserve = {
   reservationId: id,
   taskId: id2,
@@ -414,7 +419,7 @@ const detail = {
   runId: id2,
   subtasks: [subtaskState],
   checkpoints: [checkpoint],
-  currentCall: { callId: id2, kind: "subtask", subtaskId: id },
+  currentCall: { callId: id2, kind: "plan" },
   costMicroUsd: 1200,
   rev: 3,
   asOf: 7,
@@ -1098,8 +1103,11 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       completed,
       { ...completed, text: "", finishReason: "length", costMicroUsd: 0 },
       { ...completed, text: "x".repeat(100000) },
+      { ...completed, ...totals },
     ],
     [
+      { ...completed, ...totals, callCostMicroUsd: 1_000_000_000_001 },
+      { ...completed, ...totals, callInputTokens: -1 },
       ...badMoney.map((costMicroUsd) => ({ ...completed, costMicroUsd })),
       { ...completed, text: "x".repeat(100001) },
       { ...completed, text: "a\0b" },
@@ -1118,6 +1126,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       failed,
       without({ ...failed, errorClass: "invalid" }, "nextModel"),
       without({ ...failed, errorClass: "cancelled" }, "nextModel"),
+      without({ ...failed, ...totals }, "nextModel"),
       {
         ...failed,
         errorClass: "budget_refused",
@@ -1346,6 +1355,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
         code: "subtask_failed",
         reason: "Try 3 failed",
       },
+      { taskId: id, runId: id2, code: "forbidden", reason: "No permission" },
     ],
     [
       { taskId: id, runId: id2, code: "internal", reason: "x" },
@@ -1924,7 +1934,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
         rev: 0,
         asOf: 1,
       },
-      { ...detail, currentCall: { callId: id2, kind: "plan" } },
+      { ...detail, currentCall: { callId: id2, kind: "check" } },
       { ...detail, status: "blocked", reason: "Monthly cap reached" },
     ],
     [
@@ -1938,6 +1948,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       without(detail, "subtasks"),
       without(detail, "currentCall"),
       { ...detail, currentCall: { callId: id2, kind: "task" } },
+      { ...detail, currentCall: { callId: id2, kind: "subtask" } },
       {
         ...detail,
         plan: {
@@ -2020,9 +2031,13 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     CallRef,
     [
       { callId: id, kind: "aggregate" },
-      { callId: id, kind: "subtask", subtaskId: id2 },
+      { callId: id, kind: "plan" },
     ],
-    [{ callId: id }, { callId: "x", kind: "plan" }],
+    [
+      { callId: id },
+      { callId: "x", kind: "plan" },
+      { callId: id, kind: "subtask" },
+    ],
   ],
   ["DeviceLocale", DeviceLocale, ["en", "de", "ur"], ["fr", "EN", "en-US"]],
   ["DevicePlatform", DevicePlatform, ["android"], ["ios", "web"]],
@@ -2581,6 +2596,7 @@ test("all subtasks of a plan have at most 200000 bytes as JSON", () => {
 test("the largest valid M3 events and the task detail notice stay under 1 MiB", () => {
   const worst = "\u0001".repeat(1000);
   const output = "\u0001".repeat(100000);
+  const worstActor = { kind: "system", id: worst.slice(0, 200) };
   const events = [
     {
       type: "orchestration.PlanProposed",
@@ -2613,9 +2629,19 @@ test("the largest valid M3 events and the task detail notice stay under 1 MiB", 
         costMicroUsd: cap,
       },
     },
+    {
+      type: "llm.CallCompleted",
+      payload: {
+        ...completed,
+        model: `a/${"b".repeat(198)}`,
+        text: output,
+        costMicroUsd: cap,
+        ...totals,
+      },
+    },
   ];
   for (const sample of events) {
-    const value = { ...event, ...sample };
+    const value = { ...event, actor: worstActor, ...sample };
     assert.equal(RegisteredEvent.safeParse(value).success, true, sample.type);
     assert.ok(jsonBytes(value) < 1048576, sample.type);
   }
@@ -2625,19 +2651,19 @@ test("the largest valid M3 events and the task detail notice stay under 1 MiB", 
     title: worst.slice(0, 200),
     plan: {
       planVersion: Number.MAX_SAFE_INTEGER,
-      subtasks: ids.map((subtaskId, index) => ({
+      subtasks: ids.map((subtaskId) => ({
         subtaskId,
         title: worst.slice(0, 200),
         instructions: "\u0001".repeat(4000),
         agentId: id,
         model: `a/${"b".repeat(198)}`,
-        dependsOn: ids.slice(0, Math.min(index, 19)),
+        dependsOn: ids.filter((other) => other !== subtaskId),
         needsApproval: true,
         estimatedCostMicroUsd: cap,
         estimatedDurationMs: 86400000,
       })),
     },
-    currentCall: { callId: id, kind: "subtask", subtaskId: id2 },
+    currentCall: { callId: id, kind: "aggregate" },
     subtasks: ids.map((subtaskId) => ({
       ...subtaskState,
       subtaskId,
@@ -2665,10 +2691,21 @@ test("the largest valid M3 events and the task detail notice stay under 1 MiB", 
     rev: Number.MAX_SAFE_INTEGER,
     asOf: Number.MAX_SAFE_INTEGER,
   };
+  assert.ok(
+    data.plan.subtasks.every(({ dependsOn }) => dependsOn.length === 19),
+  );
   const notice = {
     ...viewMessage,
+    actor: worstActor,
+    version: Number.MAX_SAFE_INTEGER,
     type: `view.task.${id}`,
-    payload: { ...view, topic: `task:${id}`, data },
+    payload: {
+      ...view,
+      topic: `task:${id}`,
+      docId: worst.slice(0, 200),
+      rev: Number.MAX_SAFE_INTEGER,
+      data,
+    },
   };
   assert.equal(NoticeDataV1.task.safeParse(data).success, true);
   assert.equal(ViewMessageV1.safeParse(notice).success, true);
@@ -2707,9 +2744,26 @@ test("subtaskId comes with the call kind subtask only", () => {
       CallRequestedEventPayloadV1,
       { ...requested, kind: "plan", subtaskId: id },
     ],
-    [CallRef, { callId: id, kind: "subtask" }],
   ] as [z.ZodType, unknown][])
     refusedAt(schema, value, "subtaskId");
+});
+
+test("the call totals come together, and only on the final attempt", () => {
+  refusedAt(
+    CallCompletedEventPayloadV1,
+    without({ ...completed, ...totals }, "callOutputTokens"),
+    "callCostMicroUsd",
+  );
+  refusedAt(
+    CallFailedEventPayloadV1,
+    { ...without(failed, "nextModel"), callCostMicroUsd: 5 },
+    "callCostMicroUsd",
+  );
+  refusedAt(
+    CallFailedEventPayloadV1,
+    { ...failed, ...totals },
+    "callCostMicroUsd",
+  );
 });
 
 test("a message with a taskId has no mode", () => {
