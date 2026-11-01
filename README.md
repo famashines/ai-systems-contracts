@@ -262,8 +262,9 @@ Only an empty page is the end of the thread. Do not use
 `TaskDetailV1` is one document for each task: the task, the current plan
 (`plan`, a DAG through `dependsOn`), the state of each subtask of the
 current run (`subtasks`, with the start and end times for the timeline),
-the checkpoints and the cost. It has no long text, so it stays under the
-NATS limit. The output text of a subtask and the result of the run are
+the checkpoints and the cost. `plan.subtasks` shows the current agent and
+model of each subtask: projections applies `SubtaskReassigned` to it. It
+has no long text, so it stays under the NATS limit. The output text of a subtask and the result of the run are
 `TaskOutputV1` reads. The app reads the output again when a subtask
 becomes `done`, and drops the delta text of that call (ADR 0019).
 
