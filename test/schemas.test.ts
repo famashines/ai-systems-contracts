@@ -2756,7 +2756,7 @@ test("the call totals come together, and only on the final attempt", () => {
   );
   refusedAt(
     CallFailedEventPayloadV1,
-    { ...without(failed, "nextModel"), callCostMicroUsd: 5 },
+    without({ ...failed, callCostMicroUsd: 5 }, "nextModel"),
     "callCostMicroUsd",
   );
   refusedAt(
