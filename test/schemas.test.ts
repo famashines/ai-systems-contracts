@@ -116,6 +116,9 @@ import {
   SettleReservationRequestV1,
   ThresholdCrossedEventPayloadV1,
   MessageType,
+  ModelListItemV1,
+  ModelListResultV1,
+  ReasoningEffort,
   TaskText,
   ClientMessageV1,
   CommandEnvelopeV1,
@@ -614,10 +617,68 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "TaskSubmittedEventPayloadV1",
     TaskSubmittedEventPayloadV1,
-    [event.payload],
+    [
+      event.payload,
+      { ...event.payload, model: "openai/gpt-5" },
+      { ...event.payload, model: "openai/gpt-5", effort: "high" },
+    ],
     [
       { taskId: id, text: "Hi" },
       { ...event.payload, taskId: "x" },
+      { ...event.payload, model: "gpt" },
+      { ...event.payload, model: "openai/gpt-5", effort: "ultra" },
+    ],
+  ],
+  [
+    "ReasoningEffort",
+    ReasoningEffort,
+    ["max", "xhigh", "high", "medium", "low", "minimal", "none"],
+    ["High", "ultra", "", null],
+  ],
+  [
+    "ModelListItemV1",
+    ModelListItemV1,
+    [
+      { id: "openai/gpt-4.1-nano", name: "GPT-4.1 Nano", efforts: [] },
+      {
+        id: "anthropic/claude-opus-4.8",
+        name: "x".repeat(200),
+        efforts: ["max", "xhigh", "high", "medium", "low", "minimal", "none"],
+        defaultEffort: "high",
+      },
+    ],
+    [
+      { id: "gpt", name: "GPT", efforts: [] },
+      { id: "a/b", name: "", efforts: [] },
+      { id: "a/b", name: "x".repeat(201), efforts: [] },
+      { id: "a/b", name: "B" },
+      { id: "a/b", name: "B", efforts: ["ultra"] },
+      { id: "a/b", name: "B", efforts: Array.from({ length: 8 }, () => "low") },
+      { id: "a/b", name: "B", efforts: [], defaultEffort: "ultra" },
+    ],
+  ],
+  [
+    "ModelListResultV1",
+    ModelListResultV1,
+    [
+      { items: [] },
+      {
+        items: Array.from({ length: 1000 }, () => ({
+          id: "a/b",
+          name: "B",
+          efforts: [],
+        })),
+      },
+    ],
+    [
+      {},
+      {
+        items: Array.from({ length: 1001 }, () => ({
+          id: "a/b",
+          name: "B",
+          efforts: [],
+        })),
+      },
     ],
   ],
   [
@@ -852,8 +913,18 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { conversationId: id, text: "Go on", taskId: id2 },
       { conversationId: id, text: "New one", newTask: true },
       { conversationId: id, text: "New one", newTask: true, mode: "auto" },
+      { conversationId: id, text: "Hi", model: "openai/gpt-5" },
+      {
+        conversationId: id,
+        text: "New one",
+        newTask: true,
+        model: "anthropic/claude-opus-4.8",
+        effort: "max",
+      },
     ],
     [
+      { conversationId: id, text: "Hi", model: "gpt" },
+      { conversationId: id, text: "Hi", model: "a/b", effort: "ultra" },
       { conversationId: id, text: "Hi", mode: "manual" },
       { text: "Hi" },
       { conversationId: upperId, text: "Hi" },
@@ -877,9 +948,12 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...owned, intent: "steer", taskId: id },
       { ...owned, intent: "answer", taskId: id },
       { ...owned, intent: "new_task", mode: "approval" },
+      { ...owned, intent: "new_task", model: "openai/gpt-5", effort: "low" },
     ],
     [
       { ...owned, intent: "new_task", mode: "manual" },
+      { ...owned, intent: "new_task", model: "gpt" },
+      { ...owned, intent: "new_task", effort: "ultra" },
       { ...owned, intent: "steer" },
       { ...owned, intent: "answer" },
       { ...owned, intent: "chat", taskId: id },
@@ -1308,7 +1382,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     CallRequestedEventPayloadV1,
     [
       requested,
-      { ...requested, models: ["openai/gpt-4o"], maxTokens: 16384 },
+      { ...requested, models: ["openai/gpt-4o"], maxTokens: 32000 },
+      { ...requested, effort: "none" },
       { ...requested, maxCostMicroUsd: 50_000 },
       { ...requested, kind: "plan" },
       { ...requested, kind: "subtask", subtaskId: id },
@@ -1335,7 +1410,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...requested, models: [] },
       { ...requested, models: ["gpt"] },
       { ...requested, maxTokens: 0 },
-      { ...requested, maxTokens: 16385 },
+      { ...requested, maxTokens: 32001 },
+      { ...requested, effort: "ultra" },
       { ...requested, maxDurationMs: 999 },
       ...badMoney.map((maxCostMicroUsd) => ({ ...requested, maxCostMicroUsd })),
       { ...requested, agentVersion: 0 },
@@ -1936,8 +2012,11 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       },
       { ...detail, currentCall: { callId: id2, kind: "check" } },
       { ...detail, status: "blocked", reason: "Monthly cap reached" },
+      { ...detail, model: "openai/gpt-5", effort: "minimal" },
     ],
     [
+      { ...detail, model: "gpt" },
+      { ...detail, effort: "ultra" },
       { ...detail, status: "done" },
       { ...detail, mode: "manual" },
       { ...detail, plan: { planVersion: 0, subtasks: plan } },
@@ -2766,28 +2845,51 @@ test("the call totals come together, and only on the final attempt", () => {
   );
 });
 
-test("a message with a taskId has no mode", () => {
+test("a message with a taskId has no mode, model or effort", () => {
+  for (const choice of [
+    { mode: "auto" },
+    { model: "openai/gpt-5" },
+    { model: "openai/gpt-5", effort: "high" },
+  ])
+    refusedAt(
+      PostOwnerMessageCommandPayloadV1,
+      { conversationId: id, text: "Go on", taskId: id2, ...choice },
+      "taskId",
+    );
+});
+
+test("effort comes only with model", () => {
   refusedAt(
     PostOwnerMessageCommandPayloadV1,
-    { conversationId: id, text: "Go on", taskId: id2, mode: "auto" },
-    "mode",
+    { conversationId: id, text: "Hi", newTask: true, effort: "high" },
+    "effort",
   );
 });
 
-test("a new task message keeps its mode, and other intents have none", () => {
+test("a new task message keeps its mode, model and effort, and other intents have none", () => {
   const parsed = OwnerMessagePostedEventPayloadV1.parse({
     ...owned,
     intent: "steer",
     taskId: id,
     mode: "auto",
+    model: "openai/gpt-5",
+    effort: "high",
   });
-  assert.equal("mode" in parsed, false);
+  assert.deepEqual(parsed, { ...owned, intent: "steer", taskId: id });
   assert.deepEqual(
     OwnerMessagePostedEventPayloadV1.parse({
       ...owned,
       intent: "new_task",
       mode: "auto",
+      model: "openai/gpt-5",
+      effort: "high",
     }),
-    { ...owned, intent: "new_task", mode: "auto" },
+    {
+      ...owned,
+      intent: "new_task",
+      mode: "auto",
+      model: "openai/gpt-5",
+      effort: "high",
+    },
   );
 });

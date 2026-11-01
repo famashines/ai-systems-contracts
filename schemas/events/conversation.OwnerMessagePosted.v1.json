@@ -95,6 +95,23 @@
                 "auto",
                 "approval"
               ]
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "max",
+                "xhigh",
+                "high",
+                "medium",
+                "low",
+                "minimal",
+                "none"
+              ]
             }
           },
           "required": [
@@ -144,7 +161,7 @@
           ]
         }
       ],
-      "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`."
+      "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. `model` and `effort` are the choice of the owner for a new task; absent means auto."
     }
   },
   "required": [

@@ -40,6 +40,23 @@
       "format": "uuid",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
+    "model": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+    },
+    "effort": {
+      "type": "string",
+      "enum": [
+        "max",
+        "xhigh",
+        "high",
+        "medium",
+        "low",
+        "minimal",
+        "none"
+      ]
+    },
     "createdAt": {
       "type": "string",
       "format": "date-time",

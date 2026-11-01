@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { Id, MicroUsd, Timestamp } from "./common.ts";
+import { Id, MicroUsd, ModelId, Timestamp } from "./common.ts";
+import { ReasoningEffort } from "./llm.ts";
 import { ReplyText, TaskMode, TaskText } from "./orchestration.ts";
 
 export const MessageIntent = z.enum(["new_task", "steer", "answer"]);
@@ -12,14 +13,27 @@ export const PostOwnerMessageCommandPayloadV1 = z
     taskId: Id.exactOptional(),
     newTask: z.boolean().default(false),
     mode: TaskMode.exactOptional(),
+    model: ModelId.exactOptional(),
+    effort: ReasoningEffort.exactOptional(),
   })
   .refine((message) => !(message.newTask && message.taskId !== undefined), {
     message: "A new task has no taskId",
     path: ["taskId"],
   })
   .refine(
-    (message) => !(message.mode !== undefined && message.taskId !== undefined),
-    { message: "A message with a taskId has no mode", path: ["mode"] },
+    (message) =>
+      message.taskId === undefined ||
+      [message.mode, message.model, message.effort].every(
+        (value) => value === undefined,
+      ),
+    {
+      message: "A message with a taskId has no mode, model or effort",
+      path: ["taskId"],
+    },
+  )
+  .refine(
+    (message) => message.effort === undefined || message.model !== undefined,
+    { message: "effort comes only with model", path: ["effort"] },
   );
 export type PostOwnerMessageCommandPayloadV1 = z.infer<
   typeof PostOwnerMessageCommandPayloadV1
@@ -41,11 +55,13 @@ export const OwnerMessagePostedEventPayloadV1 = z
       intent: z.literal("new_task"),
       taskId: z.never().exactOptional(),
       mode: TaskMode.exactOptional(),
+      model: ModelId.exactOptional(),
+      effort: ReasoningEffort.exactOptional(),
     }),
     z.object({ ...posted, intent: z.literal(["steer", "answer"]), taskId: Id }),
   ])
   .describe(
-    "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`.",
+    "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. `model` and `effort` are the choice of the owner for a new task; absent means auto.",
   );
 export type OwnerMessagePostedEventPayloadV1 = z.infer<
   typeof OwnerMessagePostedEventPayloadV1

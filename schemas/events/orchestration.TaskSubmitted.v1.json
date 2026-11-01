@@ -91,6 +91,23 @@
           "type": "string",
           "format": "uuid",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "max",
+            "xhigh",
+            "high",
+            "medium",
+            "low",
+            "minimal",
+            "none"
+          ]
         }
       },
       "required": [
@@ -98,7 +115,7 @@
         "text",
         "mode"
       ],
-      "description": "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat."
+      "description": "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. `model` and `effort` are the choice of the owner for all calls of the task; absent means the model chain of each agent and no effort."
     }
   },
   "required": [

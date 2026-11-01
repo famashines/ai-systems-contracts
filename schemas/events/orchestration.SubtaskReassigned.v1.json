@@ -97,7 +97,7 @@
         "subtaskId",
         "agentId"
       ],
-      "description": "The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent."
+      "description": "The owner gave a subtask that is not running a different agent or model. No `model` means the task model, else the model chain of the agent."
     }
   },
   "required": [
