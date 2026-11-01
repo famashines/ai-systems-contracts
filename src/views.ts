@@ -4,11 +4,12 @@ import { BudgetMonthV1 } from "./budget.ts";
 import { Id } from "./common.ts";
 import { ConversationMessageV1 } from "./conversation.ts";
 import { EventEnvelopeV1 } from "./envelopes.ts";
-import { TaskListItemV1 } from "./orchestration.ts";
+import { TaskDetailV1, TaskListItemV1 } from "./orchestration.ts";
 import { Topic } from "./ws.ts";
 
 export const NoticeDataV1 = {
   tasks: TaskListItemV1,
+  task: TaskDetailV1,
   budget: BudgetMonthV1,
   agents: AgentListItemV1,
   conversation: ConversationMessageV1,

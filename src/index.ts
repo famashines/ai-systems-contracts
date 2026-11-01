@@ -6,6 +6,7 @@ export * from "./envelopes.ts";
 export * from "./errors.ts";
 export * from "./events.ts";
 export * from "./llm.ts";
+export * from "./notification.ts";
 export * from "./orchestration.ts";
 export * from "./prompts.ts";
 export * from "./views.ts";

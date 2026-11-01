@@ -13,8 +13,29 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | `orchestration.RunBlocked` | 1 | The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it. | [events/orchestration.RunBlocked.v1.json](../schemas/events/orchestration.RunBlocked.v1.json) |
 | `orchestration.CallRequested` | 1 | A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. | [events/orchestration.CallRequested.v1.json](../schemas/events/orchestration.CallRequested.v1.json) |
 | `orchestration.MessageRefused` | 1 | A `steer` or `answer` message for a task that cannot take it, with the reason. | [events/orchestration.MessageRefused.v1.json](../schemas/events/orchestration.MessageRefused.v1.json) |
+| `orchestration.ClarificationRequested` | 1 | The orchestrator needs answers before it plans. | [events/orchestration.ClarificationRequested.v1.json](../schemas/events/orchestration.ClarificationRequested.v1.json) |
+| `orchestration.ClarificationAnswered` | 1 | The owner answered the clarifying questions with an `answer` message of the thread. | [events/orchestration.ClarificationAnswered.v1.json](../schemas/events/orchestration.ClarificationAnswered.v1.json) |
+| `orchestration.PlanProposed` | 1 | A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task. | [events/orchestration.PlanProposed.v1.json](../schemas/events/orchestration.PlanProposed.v1.json) |
+| `orchestration.PlanEdited` | 1 | The owner changed the plan. It has the full new plan with the next `planVersion`. | [events/orchestration.PlanEdited.v1.json](../schemas/events/orchestration.PlanEdited.v1.json) |
+| `orchestration.PlanApproved` | 1 | The plan of this version is approved: by the owner, or by the system in auto mode. | [events/orchestration.PlanApproved.v1.json](../schemas/events/orchestration.PlanApproved.v1.json) |
+| `orchestration.PlanRejected` | 1 | The owner rejected the plan with a reason. The task ends. | [events/orchestration.PlanRejected.v1.json](../schemas/events/orchestration.PlanRejected.v1.json) |
+| `orchestration.SubtaskQueued` | 1 | The subtask can start: its dependencies are done, or the owner retried it. | [events/orchestration.SubtaskQueued.v1.json](../schemas/events/orchestration.SubtaskQueued.v1.json) |
+| `orchestration.SubtaskWaiting` | 1 | The subtask waits for its dependencies. A wait for the owner is `CheckpointOpened`. | [events/orchestration.SubtaskWaiting.v1.json](../schemas/events/orchestration.SubtaskWaiting.v1.json) |
+| `orchestration.SubtaskStarted` | 1 | One try of the subtask starts with the LLM call `callId`. Its deltas come on `delta.<taskId>.<callId>`. | [events/orchestration.SubtaskStarted.v1.json](../schemas/events/orchestration.SubtaskStarted.v1.json) |
+| `orchestration.SubtaskCompleted` | 1 | The subtask is done. Its output is the text of `llm.CallCompleted` of `callId`. Tokens and cost are the totals of all its calls in this run. | [events/orchestration.SubtaskCompleted.v1.json](../schemas/events/orchestration.SubtaskCompleted.v1.json) |
+| `orchestration.SubtaskFailed` | 1 | One try of the subtask failed, with a code and a plain reason. `SubtaskRetrying` follows when a retry is left. | [events/orchestration.SubtaskFailed.v1.json](../schemas/events/orchestration.SubtaskFailed.v1.json) |
+| `orchestration.SubtaskRetrying` | 1 | The subtask starts try `tryNumber` at `retryAt` (backoff). | [events/orchestration.SubtaskRetrying.v1.json](../schemas/events/orchestration.SubtaskRetrying.v1.json) |
+| `orchestration.SubtaskBlocked` | 1 | The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing. | [events/orchestration.SubtaskBlocked.v1.json](../schemas/events/orchestration.SubtaskBlocked.v1.json) |
+| `orchestration.SubtaskReassigned` | 1 | The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent. | [events/orchestration.SubtaskReassigned.v1.json](../schemas/events/orchestration.SubtaskReassigned.v1.json) |
+| `orchestration.CheckpointOpened` | 1 | The run waits for the owner to approve the start of a subtask. `reason` says why. | [events/orchestration.CheckpointOpened.v1.json](../schemas/events/orchestration.CheckpointOpened.v1.json) |
+| `orchestration.CheckpointResolved` | 1 | The owner approved or refused a checkpoint, with an optional comment. | [events/orchestration.CheckpointResolved.v1.json](../schemas/events/orchestration.CheckpointResolved.v1.json) |
+| `orchestration.RunPaused` | 1 | The owner paused the run. No new call starts. Running calls finish. | [events/orchestration.RunPaused.v1.json](../schemas/events/orchestration.RunPaused.v1.json) |
+| `orchestration.RunResumed` | 1 | The owner resumed the run. | [events/orchestration.RunResumed.v1.json](../schemas/events/orchestration.RunResumed.v1.json) |
+| `orchestration.RunCancelled` | 1 | The owner cancelled the run. Running calls stop and the task ends as `cancelled`. | [events/orchestration.RunCancelled.v1.json](../schemas/events/orchestration.RunCancelled.v1.json) |
+| `orchestration.TaskModeChanged` | 1 | The owner changed the mode of the task: `auto` or `approval`. | [events/orchestration.TaskModeChanged.v1.json](../schemas/events/orchestration.TaskModeChanged.v1.json) |
+| `orchestration.SteeringMessageAdded` | 1 | The owner sent a `steer` message for the task. Running subtasks get it at their next call. | [events/orchestration.SteeringMessageAdded.v1.json](../schemas/events/orchestration.SteeringMessageAdded.v1.json) |
 | `conversation.ConversationStarted` | 1 | A new chat thread. | [events/conversation.ConversationStarted.v1.json](../schemas/events/conversation.ConversationStarted.v1.json) |
-| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
+| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
 | `conversation.AgentReplyPosted` | 1 | An agent reply in a thread, made from the orchestration event `sourceEventId`. | [events/conversation.AgentReplyPosted.v1.json](../schemas/events/conversation.AgentReplyPosted.v1.json) |
 | `prompts.PromptCreated` | 1 | A new prompt. | [events/prompts.PromptCreated.v1.json](../schemas/events/prompts.PromptCreated.v1.json) |
 | `prompts.PromptVersionPublished` | 1 | A new immutable version of a prompt, with its variables. | [events/prompts.PromptVersionPublished.v1.json](../schemas/events/prompts.PromptVersionPublished.v1.json) |
@@ -115,6 +136,234 @@ A `steer` or `answer` message for a task that cannot take it, with the reason.
 | `intent` | `"steer"` \| `"answer"` | yes |
 | `reason` | string | yes |
 
+## orchestration.ClarificationRequested v1
+
+The orchestrator needs answers before it plans.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `questions` | array | yes |
+
+## orchestration.ClarificationAnswered v1
+
+The owner answered the clarifying questions with an `answer` message of the thread.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `conversationId` | string (uuid) | yes |
+| `messageId` | string (uuid) | yes |
+| `text` | string | yes |
+
+## orchestration.PlanProposed v1
+
+A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `planVersion` | integer | yes |
+| `subtasks` | array | yes |
+
+## orchestration.PlanEdited v1
+
+The owner changed the plan. It has the full new plan with the next `planVersion`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `planVersion` | integer | yes |
+| `subtasks` | array | yes |
+
+## orchestration.PlanApproved v1
+
+The plan of this version is approved: by the owner, or by the system in auto mode.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `planVersion` | integer | yes |
+
+## orchestration.PlanRejected v1
+
+The owner rejected the plan with a reason. The task ends.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `planVersion` | integer | yes |
+| `reason` | string | yes |
+
+## orchestration.SubtaskQueued v1
+
+The subtask can start: its dependencies are done, or the owner retried it.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+
+## orchestration.SubtaskWaiting v1
+
+The subtask waits for its dependencies. A wait for the owner is `CheckpointOpened`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+
+## orchestration.SubtaskStarted v1
+
+One try of the subtask starts with the LLM call `callId`. Its deltas come on `delta.<taskId>.<callId>`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `tryNumber` | integer | yes |
+| `callId` | string (uuid) | yes |
+| `agentId` | string (uuid) | yes |
+| `agentVersion` | integer | yes |
+
+## orchestration.SubtaskCompleted v1
+
+The subtask is done. Its output is the text of `llm.CallCompleted` of `callId`. Tokens and cost are the totals of all its calls in this run.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `callId` | string (uuid) | yes |
+| `inputTokens` | integer | yes |
+| `outputTokens` | integer | yes |
+| `costMicroUsd` | integer | yes |
+
+## orchestration.SubtaskFailed v1
+
+One try of the subtask failed, with a code and a plain reason. `SubtaskRetrying` follows when a retry is left.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `tryNumber` | integer | yes |
+| `code` | `"validation_failed"` \| `"not_found"` \| `"conflict"` \| `"unauthorized"` \| `"forbidden"` \| `"rate_limited"` \| `"internal"` \| `"unavailable"` \| `"budget_refused"` \| `"method_not_allowed"` \| `"payload_too_large"` \| `"unsupported_media_type"` \| `"runaway_stopped"` \| `"empty_output"` | yes |
+| `reason` | string | yes |
+
+## orchestration.SubtaskRetrying v1
+
+The subtask starts try `tryNumber` at `retryAt` (backoff).
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `tryNumber` | integer | yes |
+| `retryAt` | string (date-time) | yes |
+
+## orchestration.SubtaskBlocked v1
+
+The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `code` | `"budget_refused"` \| `"runaway_stopped"` \| `"forbidden"` | yes |
+| `reason` | string | yes |
+
+## orchestration.SubtaskReassigned v1
+
+The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `agentId` | string (uuid) | yes |
+| `model` | string | no |
+
+## orchestration.CheckpointOpened v1
+
+The run waits for the owner to approve the start of a subtask. `reason` says why.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `subtaskId` | string (uuid) | yes |
+| `checkpointId` | string (uuid) | yes |
+| `reason` | string | yes |
+
+## orchestration.CheckpointResolved v1
+
+The owner approved or refused a checkpoint, with an optional comment.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `checkpointId` | string (uuid) | yes |
+| `decision` | `"approved"` \| `"refused"` | yes |
+| `comment` | string | no |
+
+## orchestration.RunPaused v1
+
+The owner paused the run. No new call starts. Running calls finish.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+
+## orchestration.RunResumed v1
+
+The owner resumed the run.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+
+## orchestration.RunCancelled v1
+
+The owner cancelled the run. Running calls stop and the task ends as `cancelled`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `runId` | string (uuid) | yes |
+| `reason` | string | no |
+
+## orchestration.TaskModeChanged v1
+
+The owner changed the mode of the task: `auto` or `approval`.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `mode` | `"auto"` \| `"approval"` | yes |
+
+## orchestration.SteeringMessageAdded v1
+
+The owner sent a `steer` message for the task. Running subtasks get it at their next call.
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `taskId` | string (uuid) | yes |
+| `conversationId` | string (uuid) | yes |
+| `messageId` | string (uuid) | yes |
+| `text` | string | yes |
+
 ## conversation.ConversationStarted v1
 
 A new chat thread.
@@ -125,7 +374,7 @@ A new chat thread.
 
 ## conversation.OwnerMessagePosted v1
 
-The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`.
+The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -134,6 +383,7 @@ The owner posted a message in a thread. `taskId` is present for `steer` and `ans
 | `text` | string | yes |
 | `intent` | `"new_task"` \| `"steer"` \| `"answer"` | yes |
 | `taskId` | string (uuid) | no |
+| `mode` | `"auto"` \| `"approval"` | no |
 
 ## conversation.AgentReplyPosted v1
 

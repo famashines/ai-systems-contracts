@@ -26,6 +26,27 @@ import {
   CallStartedEventPayloadV1,
 } from "./llm.ts";
 import {
+  ClarificationRequestedEventPayloadV1,
+  ClarificationAnsweredEventPayloadV1,
+  PlanProposedEventPayloadV1,
+  PlanEditedEventPayloadV1,
+  PlanApprovedEventPayloadV1,
+  PlanRejectedEventPayloadV1,
+  SubtaskQueuedEventPayloadV1,
+  SubtaskWaitingEventPayloadV1,
+  SubtaskStartedEventPayloadV1,
+  SubtaskCompletedEventPayloadV1,
+  SubtaskFailedEventPayloadV1,
+  SubtaskRetryingEventPayloadV1,
+  SubtaskBlockedEventPayloadV1,
+  SubtaskReassignedEventPayloadV1,
+  CheckpointOpenedEventPayloadV1,
+  CheckpointResolvedEventPayloadV1,
+  RunPausedEventPayloadV1,
+  RunResumedEventPayloadV1,
+  RunCancelledEventPayloadV1,
+  TaskModeChangedEventPayloadV1,
+  SteeringMessageAddedEventPayloadV1,
   CallRequestedEventPayloadV1,
   MessageRefusedEventPayloadV1,
   RunCompletedEventPayloadV1,
@@ -54,6 +75,63 @@ export const eventRegistry = Object.freeze({
   }),
   "orchestration.MessageRefused": Object.freeze({
     1: MessageRefusedEventPayloadV1,
+  }),
+  "orchestration.ClarificationRequested": Object.freeze({
+    1: ClarificationRequestedEventPayloadV1,
+  }),
+  "orchestration.ClarificationAnswered": Object.freeze({
+    1: ClarificationAnsweredEventPayloadV1,
+  }),
+  "orchestration.PlanProposed": Object.freeze({
+    1: PlanProposedEventPayloadV1,
+  }),
+  "orchestration.PlanEdited": Object.freeze({ 1: PlanEditedEventPayloadV1 }),
+  "orchestration.PlanApproved": Object.freeze({
+    1: PlanApprovedEventPayloadV1,
+  }),
+  "orchestration.PlanRejected": Object.freeze({
+    1: PlanRejectedEventPayloadV1,
+  }),
+  "orchestration.SubtaskQueued": Object.freeze({
+    1: SubtaskQueuedEventPayloadV1,
+  }),
+  "orchestration.SubtaskWaiting": Object.freeze({
+    1: SubtaskWaitingEventPayloadV1,
+  }),
+  "orchestration.SubtaskStarted": Object.freeze({
+    1: SubtaskStartedEventPayloadV1,
+  }),
+  "orchestration.SubtaskCompleted": Object.freeze({
+    1: SubtaskCompletedEventPayloadV1,
+  }),
+  "orchestration.SubtaskFailed": Object.freeze({
+    1: SubtaskFailedEventPayloadV1,
+  }),
+  "orchestration.SubtaskRetrying": Object.freeze({
+    1: SubtaskRetryingEventPayloadV1,
+  }),
+  "orchestration.SubtaskBlocked": Object.freeze({
+    1: SubtaskBlockedEventPayloadV1,
+  }),
+  "orchestration.SubtaskReassigned": Object.freeze({
+    1: SubtaskReassignedEventPayloadV1,
+  }),
+  "orchestration.CheckpointOpened": Object.freeze({
+    1: CheckpointOpenedEventPayloadV1,
+  }),
+  "orchestration.CheckpointResolved": Object.freeze({
+    1: CheckpointResolvedEventPayloadV1,
+  }),
+  "orchestration.RunPaused": Object.freeze({ 1: RunPausedEventPayloadV1 }),
+  "orchestration.RunResumed": Object.freeze({ 1: RunResumedEventPayloadV1 }),
+  "orchestration.RunCancelled": Object.freeze({
+    1: RunCancelledEventPayloadV1,
+  }),
+  "orchestration.TaskModeChanged": Object.freeze({
+    1: TaskModeChangedEventPayloadV1,
+  }),
+  "orchestration.SteeringMessageAdded": Object.freeze({
+    1: SteeringMessageAddedEventPayloadV1,
   }),
   "conversation.ConversationStarted": Object.freeze({
     1: ConversationStartedEventPayloadV1,

@@ -18,20 +18,21 @@ const event = parseEvent(message);
 
 ## Content
 
-| File                   | Content                                                                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`, `Reason`, `ModelId`, `DurationMs`                                                                  |
-| `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                                                                                                                       |
-| `src/orchestration.ts` | `SubmitTask` command, `TaskSubmitted`, `RunStarted`, `RunCompleted`, `RunFailed`, `RunBlocked`, `CallRequested`, `MessageRefused`, task list result, `TaskStatus`, `ReplyText` |
-| `src/conversation.ts`  | `PostOwnerMessage` command, `ConversationStarted`, `OwnerMessagePosted`, `AgentReplyPosted`, thread result                                                                     |
-| `src/prompts.ts`       | `CreatePrompt` and `PublishPromptVersion` commands, `PromptCreated`, `PromptVersionPublished`, `PromptRef`, prompt version result                                              |
-| `src/agents.ts`        | agent commands, `AgentCreated`, `AgentVersionPublished`, `AgentVersionActivated`, `AgentEnabled`, `AgentDisabled`, `AgentLimits`, agent list and active version results        |
-| `src/llm.ts`           | `CallStarted`, `CallCompleted`, `CallFailed`, `LlmErrorClass`, `FinishReason`                                                                                                  |
-| `src/budget.ts`        | `SetBudget` command, `budget.*` events, `BudgetScope`, `CapScope`, rpc reserve and settle messages, `RpcSubject`, `BudgetMonthV1`                                              |
-| `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`                                                                                                     |
-| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`, `NoticeDataV1`                                                                              |
-| `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10), `DeltaV1`, `deltaSubject`                                                                 |
-| `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                                                                                                                       |
+| File                   | Content                                                                                                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/common.ts`        | `Id` (lower-case UUID v4), `Timestamp` (ISO 8601 UTC), `MicroUsd`, `Actor`, `Reason`, `ModelId`, `DurationMs`                                                                                                                     |
+| `src/envelopes.ts`     | `EventEnvelopeV1(payload)`, `CommandEnvelopeV1(payload)`                                                                                                                                                                          |
+| `src/orchestration.ts` | `SubmitTask` and the owner control commands, task, plan, subtask, checkpoint, run control and steering events, `PlanSubtasks` (a DAG), `TaskStatus`, `SubtaskStatus`, task list, task detail and task output results, `ReplyText` |
+| `src/notification.ts`  | `RegisterDevice` and `UnregisterDevice` commands, `PushToken`, `DevicePlatform`, `PushDataV1`, `PushKind`                                                                                                                         |
+| `src/conversation.ts`  | `PostOwnerMessage` command, `ConversationStarted`, `OwnerMessagePosted`, `AgentReplyPosted`, thread result                                                                                                                        |
+| `src/prompts.ts`       | `CreatePrompt` and `PublishPromptVersion` commands, `PromptCreated`, `PromptVersionPublished`, `PromptRef`, prompt version result                                                                                                 |
+| `src/agents.ts`        | agent commands, `AgentCreated`, `AgentVersionPublished`, `AgentVersionActivated`, `AgentEnabled`, `AgentDisabled`, `AgentLimits`, agent list and active version results                                                           |
+| `src/llm.ts`           | `CallStarted`, `CallCompleted`, `CallFailed`, `LlmErrorClass`, `FinishReason`                                                                                                                                                     |
+| `src/budget.ts`        | `SetBudget` command, `budget.*` events, `BudgetScope`, `CapScope`, rpc reserve and settle messages, `RpcSubject`, `BudgetMonthV1`                                                                                                 |
+| `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`                                                                                                                                                        |
+| `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`, `NoticeDataV1`                                                                                                                                 |
+| `src/ws.ts`            | `ClientMessageV1`, `ServerMessageV1`, `Topic`, `WsCloseCode`, `WsLimits` (ARCH. 10), `DeltaV1`, `deltaSubject`                                                                                                                    |
+| `src/errors.ts`        | `ProblemJson` (RFC 9457) and `ErrorCode`                                                                                                                                                                                          |
 
 Generated output: `schemas/` (JSON Schema of each exported schema and of
 each event version) and `docs/events.md` (event reference). Do not edit
@@ -84,6 +85,9 @@ new approval.
   after JSON escaping (control characters), so a 100,000 character text
   is at most about 600 KB. The messages of `CallRequested` have their own
   limit: at most 900,000 bytes as UTF-8 JSON (`JSON.stringify(messages)`).
+- The subtasks of a plan have at most 200,000 bytes as UTF-8 JSON
+  (`JSON.stringify(subtasks)`), so a plan event and `TaskDetailV1` stay
+  under the NATS limit.
 - Money is an integer number of micro-USD (`MicroUsd`, 1 USD =
   1,000,000). Convert a provider cost in USD with
   `Math.round(usd * 1_000_000)`. No schema has a float for money.
@@ -117,6 +121,74 @@ ai-proxy, for each attempt (model chain, first model first):
   with the code `empty_output`.
 - `orchestration.RunBlocked` (code `budget_refused` or `runaway_stopped`)
   puts the task in the state `blocked` until the owner acts.
+
+## Tasks and plans
+
+```
+TaskSubmitted --> ClarificationRequested <--> ClarificationAnswered
+  --> PlanProposed --> (PlanEdited)* --> PlanApproved | PlanRejected
+  --> RunStarted --> for each subtask:
+        (SubtaskWaiting) --> SubtaskQueued --> (CheckpointOpened
+        --> CheckpointResolved) --> SubtaskStarted --> SubtaskCompleted
+        or SubtaskFailed --> SubtaskRetrying --> SubtaskStarted
+        or SubtaskBlocked
+  --> RunCompleted | RunFailed | RunCancelled
+owner at any time of the run: RunPaused, RunResumed, SubtaskReassigned,
+  SubtaskQueued (retry), TaskModeChanged, SteeringMessageAdded
+```
+
+- A plan has 1 to 20 subtasks. Each `subtaskId` comes once. Each id in
+  `dependsOn` is another subtask of the plan, and the dependencies have no
+  cycle. The schema checks this. Orchestration checks the rest in code:
+  only enabled agents, and each estimate inside the task budget
+  (ARCHITECTURE 8.2).
+- `planVersion` starts at 1 and goes up by 1 for each `PlanProposed` or
+  `PlanEdited`. `ApprovePlan`, `EditPlan` and `RejectPlan` name the version
+  that the owner saw. A command for an older version gives `conflict`.
+- `PlanEdited` and `EditPlan` carry the full plan. The app makes the
+  `subtaskId` of a new subtask with `crypto.randomUUID()`.
+- A subtask with `needsApproval` opens a checkpoint before it starts.
+- `tryNumber` counts the tries of a subtask, from 1. Each try is one
+  `CallRequested` with a new `callId`. The `attempt` of `llm.*` is one model
+  of the chain inside one try.
+- Answers and steering come only through the conversation (ADR 0021):
+  `OwnerMessagePosted` with the intent `answer` gives
+  `ClarificationAnswered`, `steer` gives `SteeringMessageAdded`, or
+  `MessageRefused` when the task cannot take it.
+- `PostOwnerMessage` has an optional `mode`. conversation-hub copies it
+  into `OwnerMessagePosted` only for `new_task`. Absent means `approval`.
+
+Owner commands (M3-04). The command `type` is `orchestration.<Name>`.
+
+| Command             | Payload                             | Event                                         |
+| ------------------- | ----------------------------------- | --------------------------------------------- |
+| `ApprovePlan`       | `ApprovePlanCommandPayloadV1`       | `PlanApproved`                                |
+| `EditPlan`          | `EditPlanCommandPayloadV1`          | `PlanEdited`                                  |
+| `RejectPlan`        | `RejectPlanCommandPayloadV1`        | `PlanRejected`                                |
+| `PauseRun`          | `PauseRunCommandPayloadV1`          | `RunPaused`                                   |
+| `ResumeRun`         | `ResumeRunCommandPayloadV1`         | `RunResumed`                                  |
+| `CancelRun`         | `CancelRunCommandPayloadV1`         | `RunCancelled`                                |
+| `RetrySubtask`      | `RetrySubtaskCommandPayloadV1`      | `SubtaskQueued` (a failed or blocked subtask) |
+| `ReassignSubtask`   | `ReassignSubtaskCommandPayloadV1`   | `SubtaskReassigned`                           |
+| `SetTaskMode`       | `SetTaskModeCommandPayloadV1`       | `TaskModeChanged`                             |
+| `ResolveCheckpoint` | `ResolveCheckpointCommandPayloadV1` | `CheckpointResolved`                          |
+
+Each command event has the owner as `actor`, so audit-trace gets who did
+what and when from the event (ARCHITECTURE 11.1).
+
+## Push
+
+- The app registers its FCM token through api-gateway with
+  `notification.RegisterDevice` (`deviceId`, `platform` `android`,
+  `token`). The app makes `deviceId` once with `crypto.randomUUID()` and
+  sends it again when the token changes. It sends
+  `notification.UnregisterDevice` at sign-out.
+- The token is a secret of the device. No event and no log has it.
+  notification keeps it only in its `devices` collection.
+- The data of a push is `PushDataV1`: `kind` (`completed`, `failed`,
+  `approval_needed`, `budget`) and `taskId` (not for `budget`). All values
+  are strings, as FCM data needs. A push has no prompt and no output text
+  (ADR 0013).
 
 ## Budget rpc
 
@@ -167,20 +239,38 @@ and starts again at `i = 0`. The final text comes in the read model.
 
 ## Reads
 
-| Read                                  | Served by     | Result                       |
-| ------------------------------------- | ------------- | ---------------------------- |
-| `GET /api/conversations/:id/messages` | projections   | `ConversationThreadResultV1` |
-| budget of the month                   | projections   | `BudgetMonthV1`              |
-| agent list                            | projections   | `AgentListResultV1`          |
-| active agent version by `AgentName`   | agent-manager | `ActiveAgentVersionResultV1` |
-| one prompt version                    | prompt-studio | `PromptVersionResultV1`      |
+| Read                                      | Served by     | Result                       |
+| ----------------------------------------- | ------------- | ---------------------------- |
+| `GET /api/conversations/:id/messages`     | projections   | `ConversationThreadResultV1` |
+| `GET /api/tasks/:id`                      | projections   | `TaskDetailV1`               |
+| `GET /api/tasks/:id/output`               | projections   | `TaskOutputV1` (run result)  |
+| `GET /api/tasks/:id/subtasks/:sid/output` | projections   | `TaskOutputV1` (subtask)     |
+| budget of the month                       | projections   | `BudgetMonthV1`              |
+| agent list                                | projections   | `AgentListResultV1`          |
+| active agent version by `AgentName`       | agent-manager | `ActiveAgentVersionResultV1` |
+| one prompt version                        | prompt-studio | `PromptVersionResultV1`      |
 
 The thread result pages the same way as the task list: `items` (newest
 first) and `headSeq`, with the query `limit`, `before` (`createdAt` of the
 last item) and `beforeId` (its `messageId`).
 
+A thread page is limited by bytes, not only by count: api-gateway reads at
+most 1 MiB from an upstream, so a page can have fewer items than `limit`.
+Only an empty page is the end of the thread. Do not use
+`items.length < limit` as the end rule.
+
+`TaskDetailV1` is one document for each task: the task, the current plan
+(`plan`, a DAG through `dependsOn`), the state of each subtask of the
+current run (`subtasks`, with the start and end times for the timeline),
+the checkpoints and the cost. `plan.subtasks` shows the current agent and
+model of each subtask: projections applies `SubtaskReassigned` to it. It
+has no long text, so it stays under the NATS limit. The output text of a subtask and the result of the run are
+`TaskOutputV1` reads. The app reads the output again when a subtask
+becomes `done`, and drops the delta text of that call (ADR 0019).
+
 `NoticeDataV1` gives the schema of the `data` field of a notice for each
-read model topic: `tasks` (`TaskListItemV1`), `budget` (`BudgetMonthV1`),
+read model topic: `tasks` (`TaskListItemV1`), `task:<id>`
+(`TaskDetailV1`, `docId` is the `taskId`), `budget` (`BudgetMonthV1`),
 `agents` (`AgentListItemV1`) and `conversation:<id>`
 (`ConversationMessageV1`).
 

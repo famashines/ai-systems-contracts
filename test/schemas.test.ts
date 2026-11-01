@@ -2,6 +2,53 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { z } from "zod";
 import {
+  ApprovePlanCommandPayloadV1,
+  CancelRunCommandPayloadV1,
+  CheckpointOpenedEventPayloadV1,
+  CheckpointResolvedEventPayloadV1,
+  CheckpointV1,
+  ClarificationAnsweredEventPayloadV1,
+  ClarificationRequestedEventPayloadV1,
+  ClarifyingQuestion,
+  DevicePlatform,
+  EditPlanCommandPayloadV1,
+  PauseRunCommandPayloadV1,
+  PlanApprovedEventPayloadV1,
+  PlanEditedEventPayloadV1,
+  PlanProposedEventPayloadV1,
+  PlanRejectedEventPayloadV1,
+  PlanSubtask,
+  PlanSubtasks,
+  PushDataV1,
+  PushKind,
+  PushToken,
+  ReassignSubtaskCommandPayloadV1,
+  RegisterDeviceCommandPayloadV1,
+  RejectPlanCommandPayloadV1,
+  ResolveCheckpointCommandPayloadV1,
+  ResumeRunCommandPayloadV1,
+  RetrySubtaskCommandPayloadV1,
+  RunCancelledEventPayloadV1,
+  RunPausedEventPayloadV1,
+  RunResumedEventPayloadV1,
+  SetTaskModeCommandPayloadV1,
+  SteeringMessageAddedEventPayloadV1,
+  SubtaskBlockedEventPayloadV1,
+  SubtaskCompletedEventPayloadV1,
+  SubtaskFailedEventPayloadV1,
+  SubtaskInstructions,
+  SubtaskQueuedEventPayloadV1,
+  SubtaskReassignedEventPayloadV1,
+  SubtaskRetryingEventPayloadV1,
+  SubtaskStartedEventPayloadV1,
+  SubtaskStateV1,
+  SubtaskStatus,
+  SubtaskTitle,
+  SubtaskWaitingEventPayloadV1,
+  TaskDetailV1,
+  TaskModeChangedEventPayloadV1,
+  TaskOutputV1,
+  UnregisterDeviceCommandPayloadV1,
   ActiveAgentVersionResultV1,
   AgentListItemV1,
   AgentListResultV1,
@@ -288,6 +335,153 @@ const budgetMonth = {
   rev: 9,
   asOf: 12,
 };
+
+const id3 = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+const subtaskA = {
+  subtaskId: id,
+  title: "Find sources",
+  instructions: "Find three sources on X.",
+  agentId: id3,
+  dependsOn: [],
+  needsApproval: false,
+  estimatedCostMicroUsd: 20_000,
+  estimatedDurationMs: 60_000,
+};
+const subtaskB = {
+  subtaskId: id2,
+  title: "Write the brief",
+  instructions: "Write one page from the sources.",
+  agentId: id3,
+  model: "openai/gpt-4o-mini",
+  dependsOn: [id],
+  needsApproval: true,
+};
+const subtaskC = {
+  subtaskId: id3,
+  title: "Review",
+  instructions: "Check the brief.",
+  agentId: id,
+  dependsOn: [id, id2],
+  needsApproval: false,
+};
+const plan = [subtaskA, subtaskB, subtaskC];
+const planned = { taskId: id, planVersion: 1, subtasks: plan };
+const answered = {
+  taskId: id,
+  conversationId: id2,
+  messageId: id3,
+  text: "Yes",
+};
+const onSubtask = { taskId: id, runId: id2, subtaskId: id3 };
+const subtaskState = {
+  subtaskId: id,
+  status: "running",
+  tries: 1,
+  callId: id2,
+  startedAt: now,
+  inputTokens: 0,
+  outputTokens: 0,
+  costMicroUsd: 0,
+};
+const checkpoint = {
+  checkpointId: id3,
+  subtaskId: id2,
+  reason: "The plan marks this subtask for approval.",
+  status: "open",
+  openedAt: now,
+};
+const detail = {
+  taskId: id,
+  title: "Brief on X",
+  status: "running",
+  mode: "approval",
+  conversationId: id2,
+  createdAt: now,
+  updatedAt: now,
+  plan: { planVersion: 2, subtasks: plan },
+  runId: id2,
+  subtasks: [subtaskState],
+  checkpoints: [checkpoint],
+  costMicroUsd: 1200,
+  rev: 3,
+  asOf: 7,
+};
+const m3Events: [string, unknown][] = [
+  [
+    "orchestration.ClarificationRequested",
+    { taskId: id, questions: ["Which X?", "How long?"] },
+  ],
+  ["orchestration.ClarificationAnswered", answered],
+  ["orchestration.SteeringMessageAdded", { ...answered, text: "Shorter" }],
+  ["orchestration.PlanProposed", planned],
+  ["orchestration.PlanEdited", { ...planned, planVersion: 2 }],
+  ["orchestration.PlanApproved", { taskId: id, planVersion: 2 }],
+  [
+    "orchestration.PlanRejected",
+    { taskId: id, planVersion: 1, reason: "Too expensive" },
+  ],
+  ["orchestration.SubtaskQueued", onSubtask],
+  ["orchestration.SubtaskWaiting", onSubtask],
+  [
+    "orchestration.SubtaskStarted",
+    { ...onSubtask, tryNumber: 1, callId: id, agentId: id, agentVersion: 2 },
+  ],
+  [
+    "orchestration.SubtaskCompleted",
+    {
+      ...onSubtask,
+      callId: id,
+      inputTokens: 120,
+      outputTokens: 40,
+      costMicroUsd: 140,
+    },
+  ],
+  [
+    "orchestration.SubtaskFailed",
+    {
+      ...onSubtask,
+      tryNumber: 1,
+      code: "unavailable",
+      reason: "The model call failed.",
+    },
+  ],
+  [
+    "orchestration.SubtaskRetrying",
+    { ...onSubtask, tryNumber: 2, retryAt: now },
+  ],
+  [
+    "orchestration.SubtaskBlocked",
+    {
+      ...onSubtask,
+      code: "budget_refused",
+      reason: "Monthly cap reached: 19.80 of 20.00 USD",
+    },
+  ],
+  [
+    "orchestration.SubtaskReassigned",
+    { ...onSubtask, agentId: id, model: "openai/gpt-4o" },
+  ],
+  [
+    "orchestration.CheckpointOpened",
+    { ...onSubtask, checkpointId: id, reason: "Needs approval" },
+  ],
+  [
+    "orchestration.CheckpointResolved",
+    {
+      taskId: id,
+      runId: id2,
+      checkpointId: id,
+      decision: "refused",
+      comment: "Not now",
+    },
+  ],
+  ["orchestration.RunPaused", { taskId: id, runId: id2 }],
+  ["orchestration.RunResumed", { taskId: id, runId: id2 }],
+  ["orchestration.RunCancelled", { taskId: id, runId: id2, reason: "Stop" }],
+  ["orchestration.TaskModeChanged", { taskId: id, mode: "auto" }],
+];
+const payloadOf = (type: string) =>
+  m3Events.find(([name]) => name === type)?.[1] as Record<string, unknown>;
 
 const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
@@ -617,8 +811,10 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { conversationId: id, text: "Hi" },
       { conversationId: id, text: "Go on", taskId: id2 },
       { conversationId: id, text: "New one", newTask: true },
+      { conversationId: id, text: "New one", newTask: true, mode: "auto" },
     ],
     [
+      { conversationId: id, text: "Hi", mode: "manual" },
       { text: "Hi" },
       { conversationId: upperId, text: "Hi" },
       { conversationId: id, text: " " },
@@ -640,8 +836,10 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...owned, intent: "new_task" },
       { ...owned, intent: "steer", taskId: id },
       { ...owned, intent: "answer", taskId: id },
+      { ...owned, intent: "new_task", mode: "approval" },
     ],
     [
+      { ...owned, intent: "new_task", mode: "manual" },
       { ...owned, intent: "steer" },
       { ...owned, intent: "answer" },
       { ...owned, intent: "chat", taskId: id },
@@ -1263,6 +1461,462 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     ],
   ],
   [
+    "SubtaskTitle",
+    SubtaskTitle,
+    ["Write", "a".repeat(200)],
+    ["", " \n", "a\0b", "a".repeat(201), 1],
+  ],
+  [
+    "SubtaskInstructions",
+    SubtaskInstructions,
+    ["Do it", "a".repeat(4000)],
+    ["", "\t", "a\0b", "a".repeat(4001)],
+  ],
+  [
+    "ClarifyingQuestion",
+    ClarifyingQuestion,
+    ["Which X?", "a".repeat(1000)],
+    ["", " ", "a\0", "a".repeat(1001)],
+  ],
+  [
+    "PlanSubtask",
+    PlanSubtask,
+    [subtaskA, subtaskB, { ...subtaskA, estimatedCostMicroUsd: 0 }],
+    [
+      without(subtaskA, "needsApproval"),
+      without(subtaskA, "instructions"),
+      { ...subtaskA, subtaskId: upperId },
+      { ...subtaskA, agentId: "writer" },
+      { ...subtaskA, model: "gpt" },
+      { ...subtaskA, dependsOn: [upperId] },
+      { ...subtaskA, dependsOn: Array.from({ length: 20 }, () => id2) },
+      { ...subtaskA, estimatedDurationMs: -1 },
+      { ...subtaskA, estimatedDurationMs: 86400001 },
+      ...badMoney.map((money) => ({
+        ...subtaskA,
+        estimatedCostMicroUsd: money,
+      })),
+    ],
+  ],
+  [
+    "PlanSubtasks",
+    PlanSubtasks,
+    [plan, [subtaskA]],
+    [[], [subtaskA, { ...subtaskB, title: "" }]],
+  ],
+  [
+    "ClarificationRequestedEventPayloadV1",
+    ClarificationRequestedEventPayloadV1,
+    [payloadOf("orchestration.ClarificationRequested")],
+    [
+      { taskId: id, questions: [] },
+      { taskId: id, questions: Array.from({ length: 6 }, () => "Why?") },
+      { taskId: id, questions: [""] },
+      { questions: ["Why?"] },
+    ],
+  ],
+  [
+    "ClarificationAnsweredEventPayloadV1",
+    ClarificationAnsweredEventPayloadV1,
+    [answered, { ...answered, text: "x".repeat(20000) }],
+    [
+      { ...answered, text: "" },
+      { ...answered, text: "x".repeat(20001) },
+      without(answered, "messageId"),
+      { ...answered, conversationId: upperId },
+    ],
+  ],
+  [
+    "SteeringMessageAddedEventPayloadV1",
+    SteeringMessageAddedEventPayloadV1,
+    [answered],
+    [{ ...answered, text: " " }, without(answered, "taskId")],
+  ],
+  [
+    "PlanProposedEventPayloadV1",
+    PlanProposedEventPayloadV1,
+    [planned],
+    [
+      { ...planned, planVersion: 0 },
+      { ...planned, subtasks: [] },
+      without(planned, "planVersion"),
+    ],
+  ],
+  [
+    "PlanEditedEventPayloadV1",
+    PlanEditedEventPayloadV1,
+    [{ ...planned, planVersion: 3 }],
+    [{ ...planned, subtasks: [{ ...subtaskA, agentId: "x" }] }],
+  ],
+  [
+    "PlanApprovedEventPayloadV1",
+    PlanApprovedEventPayloadV1,
+    [{ taskId: id, planVersion: 1 }],
+    [{ taskId: id }, { taskId: id, planVersion: 1.5 }],
+  ],
+  [
+    "PlanRejectedEventPayloadV1",
+    PlanRejectedEventPayloadV1,
+    [payloadOf("orchestration.PlanRejected")],
+    [
+      { taskId: id, planVersion: 1 },
+      { taskId: id, planVersion: 1, reason: "" },
+      { taskId: id, planVersion: 1, reason: "x".repeat(1001) },
+    ],
+  ],
+  [
+    "SubtaskQueuedEventPayloadV1",
+    SubtaskQueuedEventPayloadV1,
+    [onSubtask],
+    [without(onSubtask, "runId"), { ...onSubtask, subtaskId: "s1" }],
+  ],
+  [
+    "SubtaskWaitingEventPayloadV1",
+    SubtaskWaitingEventPayloadV1,
+    [onSubtask],
+    [without(onSubtask, "subtaskId")],
+  ],
+  [
+    "SubtaskStartedEventPayloadV1",
+    SubtaskStartedEventPayloadV1,
+    [payloadOf("orchestration.SubtaskStarted")],
+    [
+      { ...payloadOf("orchestration.SubtaskStarted"), tryNumber: 0 },
+      { ...payloadOf("orchestration.SubtaskStarted"), agentVersion: 0 },
+      without(payloadOf("orchestration.SubtaskStarted"), "callId"),
+    ],
+  ],
+  [
+    "SubtaskCompletedEventPayloadV1",
+    SubtaskCompletedEventPayloadV1,
+    [payloadOf("orchestration.SubtaskCompleted")],
+    [
+      ...badMoney.map((money) => ({
+        ...payloadOf("orchestration.SubtaskCompleted"),
+        costMicroUsd: money,
+      })),
+      { ...payloadOf("orchestration.SubtaskCompleted"), inputTokens: -1 },
+      without(payloadOf("orchestration.SubtaskCompleted"), "callId"),
+    ],
+  ],
+  [
+    "SubtaskFailedEventPayloadV1",
+    SubtaskFailedEventPayloadV1,
+    [payloadOf("orchestration.SubtaskFailed")],
+    [
+      { ...payloadOf("orchestration.SubtaskFailed"), code: "oops" },
+      { ...payloadOf("orchestration.SubtaskFailed"), reason: "" },
+      without(payloadOf("orchestration.SubtaskFailed"), "tryNumber"),
+    ],
+  ],
+  [
+    "SubtaskRetryingEventPayloadV1",
+    SubtaskRetryingEventPayloadV1,
+    [payloadOf("orchestration.SubtaskRetrying")],
+    [
+      { ...payloadOf("orchestration.SubtaskRetrying"), retryAt: "soon" },
+      without(payloadOf("orchestration.SubtaskRetrying"), "retryAt"),
+    ],
+  ],
+  [
+    "SubtaskBlockedEventPayloadV1",
+    SubtaskBlockedEventPayloadV1,
+    [
+      payloadOf("orchestration.SubtaskBlocked"),
+      { ...payloadOf("orchestration.SubtaskBlocked"), code: "forbidden" },
+      { ...payloadOf("orchestration.SubtaskBlocked"), code: "runaway_stopped" },
+    ],
+    [
+      { ...payloadOf("orchestration.SubtaskBlocked"), code: "internal" },
+      without(payloadOf("orchestration.SubtaskBlocked"), "reason"),
+    ],
+  ],
+  [
+    "SubtaskReassignedEventPayloadV1",
+    SubtaskReassignedEventPayloadV1,
+    [
+      payloadOf("orchestration.SubtaskReassigned"),
+      { ...onSubtask, agentId: id },
+    ],
+    [
+      { ...onSubtask, agentId: id, model: "x" },
+      { ...onSubtask, model: "openai/gpt-4o" },
+    ],
+  ],
+  [
+    "CheckpointOpenedEventPayloadV1",
+    CheckpointOpenedEventPayloadV1,
+    [payloadOf("orchestration.CheckpointOpened")],
+    [
+      without(payloadOf("orchestration.CheckpointOpened"), "subtaskId"),
+      without(payloadOf("orchestration.CheckpointOpened"), "reason"),
+    ],
+  ],
+  [
+    "CheckpointResolvedEventPayloadV1",
+    CheckpointResolvedEventPayloadV1,
+    [
+      payloadOf("orchestration.CheckpointResolved"),
+      { taskId: id, runId: id2, checkpointId: id, decision: "approved" },
+    ],
+    [
+      { taskId: id, runId: id2, checkpointId: id, decision: "maybe" },
+      {
+        taskId: id,
+        runId: id2,
+        checkpointId: id,
+        decision: "approved",
+        comment: "",
+      },
+    ],
+  ],
+  [
+    "RunPausedEventPayloadV1",
+    RunPausedEventPayloadV1,
+    [{ taskId: id, runId: id2 }],
+    [{ taskId: id }],
+  ],
+  [
+    "RunResumedEventPayloadV1",
+    RunResumedEventPayloadV1,
+    [{ taskId: id, runId: id2 }],
+    [{ runId: id2 }],
+  ],
+  [
+    "RunCancelledEventPayloadV1",
+    RunCancelledEventPayloadV1,
+    [{ taskId: id, runId: id2 }, payloadOf("orchestration.RunCancelled")],
+    [{ taskId: id }, { taskId: id, runId: id2, reason: "" }],
+  ],
+  [
+    "TaskModeChangedEventPayloadV1",
+    TaskModeChangedEventPayloadV1,
+    [
+      { taskId: id, mode: "auto" },
+      { taskId: id, mode: "approval" },
+    ],
+    [{ taskId: id, mode: "manual" }, { taskId: id }],
+  ],
+  [
+    "ApprovePlanCommandPayloadV1",
+    ApprovePlanCommandPayloadV1,
+    [{ taskId: id, planVersion: 1 }],
+    [{ taskId: id, planVersion: 0 }, { planVersion: 1 }],
+  ],
+  [
+    "EditPlanCommandPayloadV1",
+    EditPlanCommandPayloadV1,
+    [planned],
+    [
+      { taskId: id, planVersion: 1 },
+      { ...planned, subtasks: [] },
+    ],
+  ],
+  [
+    "RejectPlanCommandPayloadV1",
+    RejectPlanCommandPayloadV1,
+    [{ taskId: id, planVersion: 1, reason: "No" }],
+    [{ taskId: id, planVersion: 1 }],
+  ],
+  [
+    "PauseRunCommandPayloadV1",
+    PauseRunCommandPayloadV1,
+    [{ taskId: id }],
+    [{}, { taskId: upperId }],
+  ],
+  [
+    "ResumeRunCommandPayloadV1",
+    ResumeRunCommandPayloadV1,
+    [{ taskId: id }],
+    [{ taskId: "x" }],
+  ],
+  [
+    "CancelRunCommandPayloadV1",
+    CancelRunCommandPayloadV1,
+    [{ taskId: id }, { taskId: id, reason: "Changed my mind" }],
+    [{ taskId: id, reason: "" }, {}],
+  ],
+  [
+    "RetrySubtaskCommandPayloadV1",
+    RetrySubtaskCommandPayloadV1,
+    [{ taskId: id, subtaskId: id2 }],
+    [{ taskId: id }, { taskId: id, subtaskId: "s1" }],
+  ],
+  [
+    "ReassignSubtaskCommandPayloadV1",
+    ReassignSubtaskCommandPayloadV1,
+    [
+      { taskId: id, subtaskId: id2, agentId: id3 },
+      { taskId: id, subtaskId: id2, agentId: id3, model: "openai/gpt-4o" },
+    ],
+    [
+      { taskId: id, subtaskId: id2 },
+      { taskId: id, subtaskId: id2, agentId: id3, model: "gpt" },
+    ],
+  ],
+  [
+    "SetTaskModeCommandPayloadV1",
+    SetTaskModeCommandPayloadV1,
+    [{ taskId: id, mode: "auto" }],
+    [{ taskId: id, mode: "fast" }, { mode: "auto" }],
+  ],
+  [
+    "ResolveCheckpointCommandPayloadV1",
+    ResolveCheckpointCommandPayloadV1,
+    [
+      { taskId: id, checkpointId: id2, decision: "approved" },
+      { taskId: id, checkpointId: id2, decision: "refused", comment: "No" },
+    ],
+    [
+      { taskId: id, checkpointId: id2 },
+      { taskId: id, checkpointId: id2, decision: "open" },
+      {
+        taskId: id,
+        checkpointId: id2,
+        decision: "refused",
+        comment: "x".repeat(1001),
+      },
+    ],
+  ],
+  [
+    "SubtaskStatus",
+    SubtaskStatus,
+    ["queued", "waiting", "running", "retrying", "blocked", "failed", "done"],
+    ["completed", "Running", "paused"],
+  ],
+  [
+    "SubtaskStateV1",
+    SubtaskStateV1,
+    [
+      subtaskState,
+      {
+        ...subtaskState,
+        status: "retrying",
+        retryAt: now,
+        endedAt: now,
+        reason: "Timeout",
+      },
+      {
+        subtaskId: id,
+        status: "waiting",
+        tries: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        costMicroUsd: 0,
+      },
+    ],
+    [
+      { ...subtaskState, status: "x" },
+      { ...subtaskState, tries: -1 },
+      { ...subtaskState, startedAt: "now" },
+      { ...subtaskState, costMicroUsd: 1.5 },
+      without(subtaskState, "costMicroUsd"),
+    ],
+  ],
+  [
+    "CheckpointV1",
+    CheckpointV1,
+    [
+      checkpoint,
+      { ...checkpoint, status: "approved", resolvedAt: now, comment: "Fine" },
+    ],
+    [
+      { ...checkpoint, status: "closed" },
+      without(checkpoint, "openedAt"),
+      without(checkpoint, "subtaskId"),
+    ],
+  ],
+  [
+    "TaskDetailV1",
+    TaskDetailV1,
+    [
+      detail,
+      {
+        taskId: id,
+        title: "Brief",
+        status: "clarifying",
+        mode: "auto",
+        createdAt: now,
+        updatedAt: now,
+        subtasks: [],
+        checkpoints: [],
+        costMicroUsd: 0,
+        rev: 0,
+        asOf: 1,
+      },
+      { ...detail, status: "blocked", reason: "Monthly cap reached" },
+    ],
+    [
+      { ...detail, status: "done" },
+      { ...detail, mode: "manual" },
+      { ...detail, plan: { planVersion: 0, subtasks: plan } },
+      { ...detail, subtasks: Array.from({ length: 21 }, () => subtaskState) },
+      { ...detail, checkpoints: Array.from({ length: 21 }, () => checkpoint) },
+      ...badMoney.map((money) => ({ ...detail, costMicroUsd: money })),
+      { ...detail, asOf: 0 },
+      without(detail, "subtasks"),
+    ],
+  ],
+  [
+    "TaskOutputV1",
+    TaskOutputV1,
+    [
+      { taskId: id, runId: id2, subtaskId: id3, text: "Output" },
+      { taskId: id, runId: id2, text: "The result" },
+      { taskId: id, runId: id2, text: "" },
+    ],
+    [
+      { taskId: id, runId: id2, text: "a\0" },
+      { taskId: id, runId: id2, text: "x".repeat(100001) },
+      { taskId: id, text: "x" },
+    ],
+  ],
+  ["DevicePlatform", DevicePlatform, ["android"], ["ios", "web"]],
+  [
+    "PushToken",
+    PushToken,
+    ["dGVzdA:APA91bH-x_y.z", "a".repeat(4096)],
+    ["", "a b", "a\n", "a".repeat(4097), "\u00e4"],
+  ],
+  [
+    "RegisterDeviceCommandPayloadV1",
+    RegisterDeviceCommandPayloadV1,
+    [{ deviceId: id, platform: "android", token: "dGVzdA:APA91b" }],
+    [
+      { deviceId: id, platform: "ios", token: "t" },
+      { deviceId: id, platform: "android" },
+      { deviceId: upperId, platform: "android", token: "t" },
+    ],
+  ],
+  [
+    "UnregisterDeviceCommandPayloadV1",
+    UnregisterDeviceCommandPayloadV1,
+    [{ deviceId: id }],
+    [{}, { deviceId: "x" }],
+  ],
+  [
+    "PushKind",
+    PushKind,
+    ["completed", "failed", "approval_needed", "budget"],
+    ["done", "approval"],
+  ],
+  [
+    "PushDataV1",
+    PushDataV1,
+    [
+      { kind: "completed", taskId: id },
+      { kind: "failed", taskId: id },
+      { kind: "approval_needed", taskId: id },
+      { kind: "budget" },
+    ],
+    [
+      { kind: "completed" },
+      { kind: "budget", taskId: id },
+      { kind: "done", taskId: id },
+      { kind: "failed", taskId: "x" },
+    ],
+  ],
+  [
     "RegisteredEvent",
     RegisteredEvent,
     [event],
@@ -1389,6 +2043,10 @@ test("long untrusted strings are checked in linear time", () => {
     [ModelId, "a".repeat(200000)],
     [AgentName, "a".repeat(200000) + "!"],
     [BudgetMonth, "2".repeat(200000)],
+    [SubtaskTitle, "a".repeat(200000) + "\0"],
+    [SubtaskInstructions, "a".repeat(200000) + "\0"],
+    [ClarifyingQuestion, "a".repeat(200000) + "\0"],
+    [PushToken, "a".repeat(200000) + " "],
   ];
   for (const [schema, value] of inputs) {
     const start = performance.now();
@@ -1634,11 +2292,13 @@ test("the largest valid events and notices stay under the NATS limit of 1 MiB", 
 test("the notice data of each read model topic is its item schema", () => {
   assert.deepEqual(Object.keys(NoticeDataV1), [
     "tasks",
+    "task",
     "budget",
     "agents",
     "conversation",
   ]);
   assert.equal(NoticeDataV1.tasks.safeParse(item).success, true);
+  assert.equal(NoticeDataV1.task.safeParse(detail).success, true);
   assert.equal(NoticeDataV1.budget.safeParse(budgetMonth).success, true);
   assert.equal(NoticeDataV1.agents.safeParse(agentItem).success, true);
   assert.equal(
@@ -1675,4 +2335,162 @@ test("the delta of a server message has the same rules as the core NATS body", (
       DeltaV1.safeParse(body).success,
       JSON.stringify(body),
     );
+});
+
+test("parseEvent reads every M3 orchestration event", () => {
+  for (const [type, payload] of m3Events) {
+    const parsed = RegisteredEvent.parse({ ...event, type, payload });
+    assert.equal(parsed.type, type);
+  }
+});
+
+test("a plan is a DAG of known subtasks that each come once", () => {
+  const ok = [
+    plan,
+    [
+      subtaskA,
+      { ...subtaskC, dependsOn: [id] },
+      { ...subtaskB, dependsOn: [id3] },
+    ],
+  ];
+  for (const subtasks of ok)
+    assert.equal(PlanSubtasks.safeParse(subtasks).success, true);
+  const refused: unknown[] = [
+    [subtaskA, { ...subtaskB, subtaskId: id }],
+    [subtaskA, { ...subtaskB, dependsOn: [id3] }],
+    [{ ...subtaskA, dependsOn: [id] }],
+    [
+      { ...subtaskA, dependsOn: [id2] },
+      { ...subtaskB, dependsOn: [id] },
+    ],
+    [
+      subtaskA,
+      { ...subtaskB, dependsOn: [id, id3] },
+      { ...subtaskC, dependsOn: [id2] },
+    ],
+    Array.from({ length: 21 }, () => ({
+      ...subtaskA,
+      subtaskId: crypto.randomUUID(),
+    })),
+  ];
+  for (const subtasks of refused) {
+    refusedAt(PlanSubtasks, subtasks, "");
+    for (const schema of [
+      PlanProposedEventPayloadV1,
+      PlanEditedEventPayloadV1,
+      EditPlanCommandPayloadV1,
+    ])
+      refusedAt(schema, { ...planned, subtasks }, "subtasks");
+  }
+  refusedAt(PlanSubtask, { ...subtaskC, dependsOn: [id, id] }, "dependsOn");
+});
+
+const worstPlan = () => {
+  const ids = Array.from({ length: 20 }, () => crypto.randomUUID());
+  const subtasks = ids.map((subtaskId, index) => ({
+    subtaskId,
+    title: "\u0001".repeat(200),
+    instructions: "x",
+    agentId: id,
+    model: `a/${"b".repeat(198)}`,
+    dependsOn: ids.slice(0, Math.min(index, 19)),
+    needsApproval: true,
+    estimatedCostMicroUsd: Number.MAX_SAFE_INTEGER,
+    estimatedDurationMs: 86400000,
+  }));
+  const each = Math.floor((200000 - jsonBytes(subtasks)) / 20 / 6);
+  for (const subtask of subtasks) subtask.instructions += "\u0001".repeat(each);
+  const last = subtasks.at(-1);
+  if (last) last.instructions += "x".repeat(200000 - jsonBytes(subtasks));
+  return subtasks;
+};
+
+test("all subtasks of a plan have at most 200000 bytes as JSON", () => {
+  const subtasks = worstPlan();
+  assert.equal(jsonBytes(subtasks), 200000);
+  assert.equal(PlanSubtasks.safeParse(subtasks).success, true);
+  const last = subtasks.at(-1);
+  if (last) last.instructions += "x";
+  refusedAt(PlanSubtasks, subtasks, "");
+});
+
+test("the largest valid M3 events and the task detail notice stay under 1 MiB", () => {
+  const worst = "\u0001".repeat(1000);
+  const subtasks = worstPlan();
+  const events = [
+    {
+      type: "orchestration.PlanProposed",
+      payload: { ...planned, subtasks },
+    },
+    {
+      type: "orchestration.ClarificationRequested",
+      payload: {
+        taskId: id,
+        questions: Array.from({ length: 5 }, () => worst),
+      },
+    },
+    {
+      type: "orchestration.SteeringMessageAdded",
+      payload: { ...answered, text: "\u0001".repeat(20000) },
+    },
+  ];
+  for (const sample of events) {
+    const value = { ...event, ...sample };
+    assert.equal(RegisteredEvent.safeParse(value).success, true, sample.type);
+    assert.ok(jsonBytes(value) < 1048576, sample.type);
+  }
+  const data = {
+    ...detail,
+    title: worst.slice(0, 200),
+    plan: { planVersion: Number.MAX_SAFE_INTEGER, subtasks },
+    subtasks: subtasks.map(({ subtaskId }) => ({
+      ...subtaskState,
+      subtaskId,
+      status: "retrying",
+      tries: Number.MAX_SAFE_INTEGER,
+      endedAt: now,
+      retryAt: now,
+      inputTokens: Number.MAX_SAFE_INTEGER,
+      outputTokens: Number.MAX_SAFE_INTEGER,
+      costMicroUsd: Number.MAX_SAFE_INTEGER,
+      reason: worst,
+    })),
+    checkpoints: subtasks.map(({ subtaskId }) => ({
+      ...checkpoint,
+      checkpointId: subtaskId,
+      subtaskId,
+      reason: worst,
+      status: "refused",
+      comment: worst,
+      resolvedAt: now,
+    })),
+    costMicroUsd: Number.MAX_SAFE_INTEGER,
+    reason: worst,
+  };
+  const notice = {
+    ...viewMessage,
+    type: `view.task.${id}`,
+    payload: { ...view, topic: `task:${id}`, data },
+  };
+  assert.equal(NoticeDataV1.task.safeParse(data).success, true);
+  assert.equal(ViewMessageV1.safeParse(notice).success, true);
+  assert.ok(jsonBytes(notice) < 1048576);
+});
+
+test("a new task message keeps its mode, and other intents have none", () => {
+  const parsed = OwnerMessagePostedEventPayloadV1.parse({
+    ...owned,
+    intent: "steer",
+    taskId: id,
+    mode: "auto",
+  });
+  assert.equal("mode" in parsed, false);
+  assert.deepEqual(
+    OwnerMessagePostedEventPayloadV1.parse({
+      ...owned,
+      intent: "new_task",
+      mode: "auto",
+    }),
+    { ...owned, intent: "new_task", mode: "auto" },
+  );
 });
