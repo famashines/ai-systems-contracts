@@ -85,7 +85,7 @@
         "taskId",
         "questions"
       ],
-      "description": "The orchestrator needs answers before it plans."
+      "description": "The orchestrator needs answers before it plans. Only a task with a `conversationId` asks questions."
     }
   },
   "required": [

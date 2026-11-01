@@ -15,6 +15,7 @@ export const ErrorCode = z.enum([
   "unsupported_media_type",
   "runaway_stopped",
   "empty_output",
+  "subtask_failed",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

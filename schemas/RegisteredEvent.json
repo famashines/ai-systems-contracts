@@ -429,7 +429,8 @@
                     "payload_too_large",
                     "unsupported_media_type",
                     "runaway_stopped",
-                    "empty_output"
+                    "empty_output",
+                    "subtask_failed"
                   ]
                 },
                 "reason": {
@@ -544,7 +545,9 @@
                   "type": "string",
                   "enum": [
                     "budget_refused",
-                    "runaway_stopped"
+                    "runaway_stopped",
+                    "forbidden",
+                    "subtask_failed"
                   ]
                 },
                 "reason": {
@@ -559,7 +562,7 @@
                 "code",
                 "reason"
               ],
-              "description": "The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it."
+              "description": "The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed."
             }
           },
           "required": [
@@ -716,6 +719,20 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "plan",
+                    "aggregate",
+                    "check",
+                    "subtask"
+                  ]
+                },
+                "subtaskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                 }
               },
               "required": [
@@ -728,7 +745,7 @@
                 "maxTokens",
                 "maxDurationMs"
               ],
-              "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt."
+              "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`."
             }
           },
           "required": [
@@ -955,7 +972,7 @@
                 "taskId",
                 "questions"
               ],
-              "description": "The orchestrator needs answers before it plans."
+              "description": "The orchestrator needs answers before it plans. Only a task with a `conversationId` asks questions."
             }
           },
           "required": [
@@ -1211,7 +1228,7 @@
                       "estimatedCostMicroUsd": {
                         "type": "integer",
                         "minimum": 0,
-                        "maximum": 9007199254740991
+                        "maximum": 1000000000000
                       },
                       "estimatedDurationMs": {
                         "type": "integer",
@@ -1228,14 +1245,18 @@
                       "needsApproval"
                     ]
                   }
+                },
+                "awaitsApproval": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "taskId",
                 "planVersion",
-                "subtasks"
+                "subtasks",
+                "awaitsApproval"
               ],
-              "description": "A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task."
+              "description": "A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task. `awaitsApproval` is false in auto mode, where `PlanApproved` follows."
             }
           },
           "required": [
@@ -1378,7 +1399,7 @@
                       "estimatedCostMicroUsd": {
                         "type": "integer",
                         "minimum": 0,
-                        "maximum": 9007199254740991
+                        "maximum": 1000000000000
                       },
                       "estimatedDurationMs": {
                         "type": "integer",
@@ -1402,7 +1423,7 @@
                 "planVersion",
                 "subtasks"
               ],
-              "description": "The owner changed the plan. It has the full new plan with the next `planVersion`."
+              "description": "The owner changed the plan. It has the full new plan with the next `planVersion`, and the estimates of orchestration."
             }
           },
           "required": [
@@ -1717,7 +1738,7 @@
                 "runId",
                 "subtaskId"
               ],
-              "description": "The subtask can start: its dependencies are done, or the owner retried it."
+              "description": "The subtask can start: its dependencies are done, or the owner retried it. A retry starts the count of tries again."
             }
           },
           "required": [
@@ -1824,7 +1845,7 @@
                 "runId",
                 "subtaskId"
               ],
-              "description": "The subtask waits for its dependencies. A wait for the owner is `CheckpointOpened`."
+              "description": "The subtask waits for its dependencies. It is not a wait for the owner: that is `CheckpointOpened`."
             }
           },
           "required": [
@@ -2061,6 +2082,11 @@
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                 },
+                "text": {
+                  "type": "string",
+                  "maxLength": 100000,
+                  "pattern": "^[^\\0]*$"
+                },
                 "inputTokens": {
                   "type": "integer",
                   "minimum": 0,
@@ -2074,7 +2100,7 @@
                 "costMicroUsd": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9007199254740991
+                  "maximum": 1000000000000
                 }
               },
               "required": [
@@ -2082,11 +2108,12 @@
                 "runId",
                 "subtaskId",
                 "callId",
+                "text",
                 "inputTokens",
                 "outputTokens",
                 "costMicroUsd"
               ],
-              "description": "The subtask is done. Its output is the text of `llm.CallCompleted` of `callId`. Tokens and cost are the totals of all its calls in this run."
+              "description": "The subtask is done with the output `text` of the call `callId`. Tokens and cost are the values of that call."
             }
           },
           "required": [
@@ -2208,13 +2235,29 @@
                     "payload_too_large",
                     "unsupported_media_type",
                     "runaway_stopped",
-                    "empty_output"
+                    "empty_output",
+                    "subtask_failed"
                   ]
                 },
                 "reason": {
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1000
+                },
+                "inputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "outputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costMicroUsd": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000000
                 }
               },
               "required": [
@@ -2223,9 +2266,12 @@
                 "subtaskId",
                 "tryNumber",
                 "code",
-                "reason"
+                "reason",
+                "inputTokens",
+                "outputTokens",
+                "costMicroUsd"
               ],
-              "description": "One try of the subtask failed, with a code and a plain reason. `SubtaskRetrying` follows when a retry is left."
+              "description": "One try of the subtask failed, with a code, a plain reason, and the tokens and cost of the try. `SubtaskRetrying` follows when a try is left, else `RunBlocked` with the code `subtask_failed`."
             }
           },
           "required": [
@@ -2466,7 +2512,7 @@
                 "code",
                 "reason"
               ],
-              "description": "The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing."
+              "description": "The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing. `RunBlocked` with the same code follows."
             }
           },
           "required": [
@@ -2694,6 +2740,11 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1000
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                 }
               },
               "required": [
@@ -2703,7 +2754,7 @@
                 "checkpointId",
                 "reason"
               ],
-              "description": "The run waits for the owner to approve the start of a subtask. `reason` says why."
+              "description": "The run waits for the owner to approve the start of a subtask. Orchestration writes the `reason`: Approval needed for <subtask title>. After `deadline` the checkpoint expires."
             }
           },
           "required": [
@@ -2808,7 +2859,8 @@
                   "type": "string",
                   "enum": [
                     "approved",
-                    "refused"
+                    "refused",
+                    "expired"
                   ]
                 },
                 "comment": {
@@ -2823,7 +2875,7 @@
                 "checkpointId",
                 "decision"
               ],
-              "description": "The owner approved or refused a checkpoint, with an optional comment."
+              "description": "The owner approved or refused a checkpoint, with an optional comment, or the system closed it at its deadline (`expired`). A refused or expired checkpoint fails its subtask, and the run goes blocked."
             }
           },
           "required": [
@@ -3025,7 +3077,7 @@
                 "taskId",
                 "runId"
               ],
-              "description": "The owner resumed the run."
+              "description": "The run goes on after a pause or a block."
             }
           },
           "required": [
@@ -3131,7 +3183,7 @@
                 "taskId",
                 "runId"
               ],
-              "description": "The owner cancelled the run. Running calls stop and the task ends as `cancelled`."
+              "description": "The owner cancelled the run. `CallCancelRequested` stops the running calls, and the task ends as `cancelled`."
             }
           },
           "required": [
@@ -3339,15 +3391,361 @@
                   "type": "string",
                   "maxLength": 20000,
                   "pattern": "^(?=[^\\0]*\\S)[^\\0]*$"
+                },
+                "runId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
                 }
               },
               "required": [
                 "taskId",
                 "conversationId",
                 "messageId",
-                "text"
+                "text",
+                "runId"
               ],
-              "description": "The owner sent a `steer` message for the task. Running subtasks get it at their next call."
+              "description": "The owner sent a `steer` message during the run. Only subtasks that have not started get it. M3 has no re-plan."
+            }
+          },
+          "required": [
+            "eventId",
+            "type",
+            "schemaVersion",
+            "streamId",
+            "version",
+            "occurredAt",
+            "correlationId",
+            "causationId",
+            "actor",
+            "payload"
+          ]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "type": {
+              "type": "string",
+              "const": "orchestration.TaskCancelled"
+            },
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "streamId": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z][a-z0-9]*-\\S+$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "occurredAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "correlationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "causationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "actor": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "agent",
+                    "system"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                }
+              },
+              "required": [
+                "taskId"
+              ],
+              "description": "The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). `CallCancelRequested` stops the running orchestrator call, and the task ends as `cancelled`."
+            }
+          },
+          "required": [
+            "eventId",
+            "type",
+            "schemaVersion",
+            "streamId",
+            "version",
+            "occurredAt",
+            "correlationId",
+            "causationId",
+            "actor",
+            "payload"
+          ]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "type": {
+              "type": "string",
+              "const": "orchestration.CallSettled"
+            },
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "streamId": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z][a-z0-9]*-\\S+$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "occurredAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "correlationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "causationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "actor": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "agent",
+                    "system"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "callId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "plan",
+                    "aggregate",
+                    "check",
+                    "subtask"
+                  ]
+                },
+                "subtaskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "inputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "outputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "costMicroUsd": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 100000,
+                  "pattern": "^[^\\0]*$"
+                }
+              },
+              "required": [
+                "taskId",
+                "callId",
+                "kind",
+                "inputTokens",
+                "outputTokens",
+                "costMicroUsd"
+              ],
+              "description": "A call of the task has its final outcome: completed, failed or cancelled. Tokens and cost are the totals of all its attempts, and `text` is its output when it gave one. The cost of the task is the sum of these costs."
+            }
+          },
+          "required": [
+            "eventId",
+            "type",
+            "schemaVersion",
+            "streamId",
+            "version",
+            "occurredAt",
+            "correlationId",
+            "causationId",
+            "actor",
+            "payload"
+          ]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "eventId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "type": {
+              "type": "string",
+              "const": "orchestration.CallCancelRequested"
+            },
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "streamId": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z][a-z0-9]*-\\S+$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "occurredAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "correlationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "causationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "actor": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "agent",
+                    "system"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "taskId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "callId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              },
+              "required": [
+                "taskId",
+                "callId"
+              ],
+              "description": "Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve."
             }
           },
           "required": [
@@ -4229,6 +4627,21 @@
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "callInputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "callOutputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "callCostMicroUsd": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000000
                 }
               },
               "required": [
@@ -4245,7 +4658,7 @@
                 "latencyMs",
                 "bodyId"
               ],
-              "description": "The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response."
+              "description": "The call is done: output text, tokens, cost in micro-USD, latency, and the id of the stored request and response. `callInputTokens`, `callOutputTokens` and `callCostMicroUsd` are the totals of all attempts of the call."
             }
           },
           "required": [
@@ -4358,7 +4771,8 @@
                     "timeout",
                     "provider",
                     "invalid",
-                    "budget_refused"
+                    "budget_refused",
+                    "cancelled"
                   ]
                 },
                 "reason": {
@@ -4395,6 +4809,21 @@
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "callInputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "callOutputTokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "callCostMicroUsd": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000000
                 }
               },
               "required": [
@@ -4406,7 +4835,7 @@
                 "reason",
                 "costMicroUsd"
               ],
-              "description": "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed."
+              "description": "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. The final attempt has the totals of all attempts of the call (`callInputTokens`, `callOutputTokens`, `callCostMicroUsd`)."
             }
           },
           "required": [

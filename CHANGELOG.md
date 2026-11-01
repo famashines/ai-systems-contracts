@@ -1,6 +1,84 @@
 # Changelog
 
+## 0.4.1
+
+Do not use v0.4.0. No service installs it. v0.4.1 changes its M3 schemas
+in place (still schema version 1), from the review of contracts #6.
+
+Changes against v0.4.0:
+
+| Schema                                                                             | Change                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SubtaskCompletedEventPayloadV1`                                                   | new required `text` (`OutputText`); tokens and cost are of the completing call                                                                                                             |
+| `SubtaskFailedEventPayloadV1`                                                      | new required `inputTokens`, `outputTokens`, `costMicroUsd`                                                                                                                                 |
+| `SteeringMessageAddedEventPayloadV1`                                               | new required `runId`; only subtasks that have not started get it                                                                                                                           |
+| `PlanProposedEventPayloadV1`                                                       | new required `awaitsApproval`                                                                                                                                                              |
+| `CheckpointOpenedEventPayloadV1`                                                   | optional `deadline`; orchestration writes the `reason`                                                                                                                                     |
+| `CheckpointResolvedEventPayloadV1`, `CheckpointV1`                                 | new decision and status `expired` (`CheckpointOutcome`); `CheckpointV1` has `deadline`                                                                                                     |
+| `ResolveCheckpointCommandPayloadV1`                                                | stays `approved` or `refused` (`CheckpointDecision`)                                                                                                                                       |
+| `SubtaskStatus`, `SubtaskStateV1`                                                  | new values `awaiting_approval`, `cancelled`, `skipped`                                                                                                                                     |
+| `TaskDetailV1`                                                                     | new required nullable `currentCall` (`CallRef`, never the kind `subtask`); only the latest checkpoint of each subtask; `plan.subtasks` is `z.array(PlanSubtask).max(20)` with no byte rule |
+| `PlanSubtask`                                                                      | `dependsOn` refine aborts; `estimatedCostMicroUsd` is at most 1e12 micro-USD                                                                                                               |
+| `SubtaskCompleted`, `SubtaskFailed`, `SubtaskStateV1`, `TaskDetailV1` money fields | at most 1e12 micro-USD (`CapMicroUsd`)                                                                                                                                                     |
+| `RegisterDeviceCommandPayloadV1`                                                   | new required `locale` (`DeviceLocale`: `en`, `de`, `ur`)                                                                                                                                   |
+| `PostOwnerMessageCommandPayloadV1`                                                 | a message with a `taskId` has no `mode`                                                                                                                                                    |
+| `EditPlanCommandPayloadV1`                                                         | orchestration ignores its estimates (description)                                                                                                                                          |
+
+New against v0.4.0:
+
+- Events, schema version 1: `orchestration.CallSettled` (each settled
+  call of a task: `kind`, `subtaskId` for a subtask, tokens, cost, text),
+  `orchestration.CallCancelRequested` (ai-proxy stops a running call),
+  `orchestration.TaskCancelled` (a task with no run).
+- README: the cancel rules of ai-proxy (a cancel that comes before its
+  `CallRequested`), the call totals rule, `ResumeRun` of a task blocked
+  with `subtask_failed` gives `conflict`, and the table from events to
+  `PushKind`.
+- `CancelTaskCommandPayloadV1`, `CallKind`, `CallRef`, `CheckpointOutcome`,
+  `DeviceLocale`.
+- README: the status table from each event to the task and the subtask
+  status, the run rules (checkpoints, last try, retry, resume, cancel,
+  steer), the money commands and the ADR 0028 rule for them, the rules
+  that are only in zod.
+- A test shows that the JSON Schema of a plan accepts a cyclic plan.
+
+Released v0.3.x schemas that this version changes:
+
+| Schema                                                    | Change                                                                                                                   | Kind           |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| `LlmErrorClass`, `CallFailedEventPayloadV1`               | new class `cancelled` (not retryable)                                                                                    | new value      |
+| `ErrorCode`, `ProblemJson`, `ServerMessageV1` `error`     | new code `subtask_failed`                                                                                                | new value      |
+| `RunBlockedEventPayloadV1`                                | new codes `forbidden` and `subtask_failed`                                                                               | new value      |
+| `CallRequestedEventPayloadV1`                             | optional `kind` and `subtaskId`; `subtaskId` only with the kind `subtask`                                                | optional field |
+| `CallCompletedEventPayloadV1`, `CallFailedEventPayloadV1` | optional `callInputTokens`, `callOutputTokens`, `callCostMicroUsd` (call totals, final attempt only, all three together) | optional field |
+
+Deploy order (this replaces the order of 0.4.0):
+
+1. conversation-hub, projections and ai-proxy move to v0.4.1 first.
+   conversation-hub and projections read `ORCHESTRATION` with
+   `parseEvent`. On v0.3.x a new event type or a new `RunBlocked` code
+   fails the parse, and `kit/messaging` puts the message in the DLQ at
+   once. ai-proxy needs v0.4.1 to read `CallCancelRequested`.
+2. gitops gives ai-proxy a second durable consumer with the filter
+   `orchestration.CallCancelRequested` (ADR 0023 must change).
+3. notification and audit-trace start on v0.4.1.
+4. orchestration moves to v0.4.1 and sends the new events and codes only
+   after steps 1 and 2. Only orchestration v0.4.1 sends
+   `CallCancelRequested`, so ai-proxy sends the class `cancelled` only when
+   orchestration and projections can read it. The orchestration rollout
+   uses the `Recreate` strategy: an old pod cannot parse `llm.CallFailed`
+   `cancelled`, and with `RollingUpdate` it can put that message in the
+   DLQ. If an old pod did, replay the DLQ after the rollout.
+5. api-gateway and conversation-hub move to v0.4.1 before the app sends
+   `mode`. On v0.3.x they strip it.
+6. The app moves to v0.4.1 before a service sends the error code
+   `subtask_failed` in a problem or a WebSocket `error`.
+7. orchestration uses `approval` for an absent `mode` only after the app
+   can approve a plan (M3-08).
+
 ## 0.4.0
+
+Do not use this version. Use 0.4.1.
 
 For M3. All changes are additive: every v0.3.x event, command and result
 stays valid.
@@ -18,8 +96,7 @@ Deploy order:
 
 1. conversation-hub and projections move to v0.4.0 first. They read all of
    `ORCHESTRATION` with `parseEvent`. On v0.3.x a new event type fails the
-   parse, and `kit/messaging` puts the message in the DLQ at once. ai-proxy reads
-   only `orchestration.CallRequested`, so it can stay on v0.3.x.
+   parse, and `kit/messaging` puts the message in the DLQ at once.
 2. notification and audit-trace start on v0.4.0.
 3. orchestration sends the new events only after step 1.
 4. api-gateway and conversation-hub move to v0.4.0 before the app sends

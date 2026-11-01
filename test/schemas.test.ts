@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { z } from "zod";
 import {
+  DeviceLocale,
+  CallRef,
+  CheckpointOutcome,
+  CancelTaskCommandPayloadV1,
+  CallCancelRequestedEventPayloadV1,
+  CallSettledEventPayloadV1,
+  CallKind,
+  TaskCancelledEventPayloadV1,
   ApprovePlanCommandPayloadV1,
   CancelRunCommandPayloadV1,
   CheckpointOpenedEventPayloadV1,
@@ -257,6 +265,11 @@ const failed = {
   costMicroUsd: 0,
   nextModel: "anthropic/claude-haiku-4.5",
 };
+const totals = {
+  callInputTokens: 240,
+  callOutputTokens: 40,
+  callCostMicroUsd: 1_000_000_000_000,
+};
 const reserve = {
   reservationId: id,
   taskId: id2,
@@ -301,6 +314,7 @@ const errorCodes = [
   "unsupported_media_type",
   "runaway_stopped",
   "empty_output",
+  "subtask_failed",
 ];
 const requested = {
   taskId: id,
@@ -366,6 +380,9 @@ const subtaskC = {
 };
 const plan = [subtaskA, subtaskB, subtaskC];
 const planned = { taskId: id, planVersion: 1, subtasks: plan };
+const proposed = { ...planned, awaitsApproval: true };
+const cap = 1_000_000_000_000;
+const badCap = [...badMoney, cap + 1];
 const answered = {
   taskId: id,
   conversationId: id2,
@@ -402,6 +419,7 @@ const detail = {
   runId: id2,
   subtasks: [subtaskState],
   checkpoints: [checkpoint],
+  currentCall: { callId: id2, kind: "plan" },
   costMicroUsd: 1200,
   rev: 3,
   asOf: 7,
@@ -412,8 +430,11 @@ const m3Events: [string, unknown][] = [
     { taskId: id, questions: ["Which X?", "How long?"] },
   ],
   ["orchestration.ClarificationAnswered", answered],
-  ["orchestration.SteeringMessageAdded", { ...answered, text: "Shorter" }],
-  ["orchestration.PlanProposed", planned],
+  [
+    "orchestration.SteeringMessageAdded",
+    { ...answered, runId: id2, text: "Shorter" },
+  ],
+  ["orchestration.PlanProposed", proposed],
   ["orchestration.PlanEdited", { ...planned, planVersion: 2 }],
   ["orchestration.PlanApproved", { taskId: id, planVersion: 2 }],
   [
@@ -431,6 +452,7 @@ const m3Events: [string, unknown][] = [
     {
       ...onSubtask,
       callId: id,
+      text: "Three sources.",
       inputTokens: 120,
       outputTokens: 40,
       costMicroUsd: 140,
@@ -443,6 +465,9 @@ const m3Events: [string, unknown][] = [
       tryNumber: 1,
       code: "unavailable",
       reason: "The model call failed.",
+      inputTokens: 120,
+      outputTokens: 0,
+      costMicroUsd: 30,
     },
   ],
   [
@@ -479,6 +504,21 @@ const m3Events: [string, unknown][] = [
   ["orchestration.RunResumed", { taskId: id, runId: id2 }],
   ["orchestration.RunCancelled", { taskId: id, runId: id2, reason: "Stop" }],
   ["orchestration.TaskModeChanged", { taskId: id, mode: "auto" }],
+  ["orchestration.TaskCancelled", { taskId: id, reason: "Not needed" }],
+  [
+    "orchestration.CallSettled",
+    {
+      taskId: id,
+      callId: id2,
+      kind: "subtask",
+      subtaskId: id3,
+      inputTokens: 120,
+      outputTokens: 40,
+      costMicroUsd: 140,
+      text: "Three sources.",
+    },
+  ],
+  ["orchestration.CallCancelRequested", { taskId: id, callId: id2 }],
 ];
 const payloadOf = (type: string) =>
   m3Events.find(([name]) => name === type)?.[1] as Record<string, unknown>;
@@ -1063,8 +1103,11 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       completed,
       { ...completed, text: "", finishReason: "length", costMicroUsd: 0 },
       { ...completed, text: "x".repeat(100000) },
+      { ...completed, ...totals },
     ],
     [
+      { ...completed, ...totals, callCostMicroUsd: 1_000_000_000_001 },
+      { ...completed, ...totals, callInputTokens: -1 },
       ...badMoney.map((costMicroUsd) => ({ ...completed, costMicroUsd })),
       { ...completed, text: "x".repeat(100001) },
       { ...completed, text: "a\0b" },
@@ -1082,6 +1125,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       failed,
       without({ ...failed, errorClass: "invalid" }, "nextModel"),
+      without({ ...failed, errorClass: "cancelled" }, "nextModel"),
+      without({ ...failed, ...totals }, "nextModel"),
       {
         ...failed,
         errorClass: "budget_refused",
@@ -1265,6 +1310,8 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       requested,
       { ...requested, models: ["openai/gpt-4o"], maxTokens: 16384 },
       { ...requested, maxCostMicroUsd: 50_000 },
+      { ...requested, kind: "plan" },
+      { ...requested, kind: "subtask", subtaskId: id },
       {
         ...requested,
         messages: [{ role: "assistant", content: "x".repeat(100000) }],
@@ -1302,6 +1349,13 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       { taskId: id, runId: id2, code: "budget_refused", reason: "Cap reached" },
       { taskId: id, runId: id2, code: "runaway_stopped", reason: "Loop" },
+      {
+        taskId: id,
+        runId: id2,
+        code: "subtask_failed",
+        reason: "Try 3 failed",
+      },
+      { taskId: id, runId: id2, code: "forbidden", reason: "No permission" },
     ],
     [
       { taskId: id, runId: id2, code: "internal", reason: "x" },
@@ -1492,7 +1546,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...subtaskA, dependsOn: Array.from({ length: 20 }, () => id2) },
       { ...subtaskA, estimatedDurationMs: -1 },
       { ...subtaskA, estimatedDurationMs: 86400001 },
-      ...badMoney.map((money) => ({
+      ...badCap.map((money) => ({
         ...subtaskA,
         estimatedCostMicroUsd: money,
       })),
@@ -1529,17 +1583,23 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "SteeringMessageAddedEventPayloadV1",
     SteeringMessageAddedEventPayloadV1,
-    [answered],
-    [{ ...answered, text: " " }, without(answered, "taskId")],
+    [{ ...answered, runId: id2 }],
+    [
+      { ...answered, runId: id2, text: " " },
+      without({ ...answered, runId: id2 }, "taskId"),
+      answered,
+    ],
   ],
   [
     "PlanProposedEventPayloadV1",
     PlanProposedEventPayloadV1,
-    [planned],
+    [proposed, { ...proposed, awaitsApproval: false }],
     [
-      { ...planned, planVersion: 0 },
-      { ...planned, subtasks: [] },
-      without(planned, "planVersion"),
+      { ...proposed, planVersion: 0 },
+      { ...proposed, subtasks: [] },
+      without(proposed, "planVersion"),
+      planned,
+      { ...proposed, awaitsApproval: "yes" },
     ],
   ],
   [
@@ -1591,11 +1651,16 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     SubtaskCompletedEventPayloadV1,
     [payloadOf("orchestration.SubtaskCompleted")],
     [
-      ...badMoney.map((money) => ({
+      ...badCap.map((money) => ({
         ...payloadOf("orchestration.SubtaskCompleted"),
         costMicroUsd: money,
       })),
       { ...payloadOf("orchestration.SubtaskCompleted"), inputTokens: -1 },
+      without(payloadOf("orchestration.SubtaskCompleted"), "text"),
+      {
+        ...payloadOf("orchestration.SubtaskCompleted"),
+        text: "x".repeat(100001),
+      },
       without(payloadOf("orchestration.SubtaskCompleted"), "callId"),
     ],
   ],
@@ -1607,6 +1672,11 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...payloadOf("orchestration.SubtaskFailed"), code: "oops" },
       { ...payloadOf("orchestration.SubtaskFailed"), reason: "" },
       without(payloadOf("orchestration.SubtaskFailed"), "tryNumber"),
+      without(payloadOf("orchestration.SubtaskFailed"), "costMicroUsd"),
+      ...badCap.map((money) => ({
+        ...payloadOf("orchestration.SubtaskFailed"),
+        costMicroUsd: money,
+      })),
     ],
   ],
   [
@@ -1646,8 +1716,12 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "CheckpointOpenedEventPayloadV1",
     CheckpointOpenedEventPayloadV1,
-    [payloadOf("orchestration.CheckpointOpened")],
     [
+      payloadOf("orchestration.CheckpointOpened"),
+      { ...payloadOf("orchestration.CheckpointOpened"), deadline: now },
+    ],
+    [
+      { ...payloadOf("orchestration.CheckpointOpened"), deadline: "soon" },
       without(payloadOf("orchestration.CheckpointOpened"), "subtaskId"),
       without(payloadOf("orchestration.CheckpointOpened"), "reason"),
     ],
@@ -1658,6 +1732,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       payloadOf("orchestration.CheckpointResolved"),
       { taskId: id, runId: id2, checkpointId: id, decision: "approved" },
+      { taskId: id, runId: id2, checkpointId: id, decision: "expired" },
     ],
     [
       { taskId: id, runId: id2, checkpointId: id, decision: "maybe" },
@@ -1770,6 +1845,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       { taskId: id, checkpointId: id2 },
       { taskId: id, checkpointId: id2, decision: "open" },
+      { taskId: id, checkpointId: id2, decision: "expired" },
       {
         taskId: id,
         checkpointId: id2,
@@ -1781,7 +1857,18 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "SubtaskStatus",
     SubtaskStatus,
-    ["queued", "waiting", "running", "retrying", "blocked", "failed", "done"],
+    [
+      "waiting",
+      "queued",
+      "awaiting_approval",
+      "running",
+      "retrying",
+      "blocked",
+      "failed",
+      "done",
+      "cancelled",
+      "skipped",
+    ],
     ["completed", "Running", "paused"],
   ],
   [
@@ -1810,6 +1897,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...subtaskState, tries: -1 },
       { ...subtaskState, startedAt: "now" },
       { ...subtaskState, costMicroUsd: 1.5 },
+      { ...subtaskState, costMicroUsd: cap + 1 },
       without(subtaskState, "costMicroUsd"),
     ],
   ],
@@ -1819,6 +1907,7 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
     [
       checkpoint,
       { ...checkpoint, status: "approved", resolvedAt: now, comment: "Fine" },
+      { ...checkpoint, status: "expired", deadline: now, resolvedAt: now },
     ],
     [
       { ...checkpoint, status: "closed" },
@@ -1839,11 +1928,13 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
         createdAt: now,
         updatedAt: now,
         subtasks: [],
+        currentCall: null,
         checkpoints: [],
         costMicroUsd: 0,
         rev: 0,
         asOf: 1,
       },
+      { ...detail, currentCall: { callId: id2, kind: "check" } },
       { ...detail, status: "blocked", reason: "Monthly cap reached" },
     ],
     [
@@ -1852,9 +1943,19 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { ...detail, plan: { planVersion: 0, subtasks: plan } },
       { ...detail, subtasks: Array.from({ length: 21 }, () => subtaskState) },
       { ...detail, checkpoints: Array.from({ length: 21 }, () => checkpoint) },
-      ...badMoney.map((money) => ({ ...detail, costMicroUsd: money })),
+      ...badCap.map((money) => ({ ...detail, costMicroUsd: money })),
       { ...detail, asOf: 0 },
       without(detail, "subtasks"),
+      without(detail, "currentCall"),
+      { ...detail, currentCall: { callId: id2, kind: "task" } },
+      { ...detail, currentCall: { callId: id2, kind: "subtask" } },
+      {
+        ...detail,
+        plan: {
+          planVersion: 1,
+          subtasks: Array.from({ length: 21 }, () => subtaskA),
+        },
+      },
     ],
   ],
   [
@@ -1871,6 +1972,74 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
       { taskId: id, text: "x" },
     ],
   ],
+  [
+    "TaskCancelledEventPayloadV1",
+    TaskCancelledEventPayloadV1,
+    [{ taskId: id }, payloadOf("orchestration.TaskCancelled")],
+    [{}, { taskId: id, reason: "" }],
+  ],
+  [
+    "CallKind",
+    CallKind,
+    ["plan", "aggregate", "check", "subtask"],
+    ["task", "Plan"],
+  ],
+  [
+    "CallSettledEventPayloadV1",
+    CallSettledEventPayloadV1,
+    [
+      payloadOf("orchestration.CallSettled"),
+      {
+        taskId: id,
+        callId: id2,
+        kind: "plan",
+        inputTokens: 0,
+        outputTokens: 0,
+        costMicroUsd: cap,
+      },
+    ],
+    [
+      ...badCap.map((money) => ({
+        ...payloadOf("orchestration.CallSettled"),
+        costMicroUsd: money,
+      })),
+      { ...payloadOf("orchestration.CallSettled"), kind: "task" },
+      { ...payloadOf("orchestration.CallSettled"), text: "a\0" },
+      without(payloadOf("orchestration.CallSettled"), "inputTokens"),
+    ],
+  ],
+  [
+    "CallCancelRequestedEventPayloadV1",
+    CallCancelRequestedEventPayloadV1,
+    [{ taskId: id, callId: id2 }],
+    [{ taskId: id }, { taskId: id, callId: upperId }],
+  ],
+  [
+    "CancelTaskCommandPayloadV1",
+    CancelTaskCommandPayloadV1,
+    [{ taskId: id }, { taskId: id, reason: "Not needed" }],
+    [{}, { taskId: id, reason: "" }],
+  ],
+  [
+    "CheckpointOutcome",
+    CheckpointOutcome,
+    ["approved", "refused", "expired"],
+    ["open", "Approved"],
+  ],
+  [
+    "CallRef",
+    CallRef,
+    [
+      { callId: id, kind: "aggregate" },
+      { callId: id, kind: "plan" },
+    ],
+    [
+      { callId: id },
+      { callId: "x", kind: "plan" },
+      { callId: id, kind: "subtask" },
+    ],
+  ],
+  ["DeviceLocale", DeviceLocale, ["en", "de", "ur"], ["fr", "EN", "en-US"]],
   ["DevicePlatform", DevicePlatform, ["android"], ["ios", "web"]],
   [
     "PushToken",
@@ -1881,9 +2050,19 @@ const cases: [string, z.ZodType, unknown[], unknown[]][] = [
   [
     "RegisterDeviceCommandPayloadV1",
     RegisterDeviceCommandPayloadV1,
-    [{ deviceId: id, platform: "android", token: "dGVzdA:APA91b" }],
     [
-      { deviceId: id, platform: "ios", token: "t" },
+      {
+        deviceId: id,
+        platform: "android",
+        token: "dGVzdA:APA91b",
+        locale: "en",
+      },
+      { deviceId: id, platform: "android", token: "t", locale: "ur" },
+    ],
+    [
+      { deviceId: id, platform: "android", token: "t" },
+      { deviceId: id, platform: "android", token: "t", locale: "fr" },
+      { deviceId: id, platform: "ios", token: "t", locale: "de" },
       { deviceId: id, platform: "android" },
       { deviceId: upperId, platform: "android", token: "t" },
     ],
@@ -2380,7 +2559,7 @@ test("a plan is a DAG of known subtasks that each come once", () => {
       PlanEditedEventPayloadV1,
       EditPlanCommandPayloadV1,
     ])
-      refusedAt(schema, { ...planned, subtasks }, "subtasks");
+      refusedAt(schema, { ...proposed, subtasks }, "subtasks");
   }
   refusedAt(PlanSubtask, { ...subtaskC, dependsOn: [id, id] }, "dependsOn");
 });
@@ -2395,7 +2574,7 @@ const worstPlan = () => {
     model: `a/${"b".repeat(198)}`,
     dependsOn: ids.slice(0, Math.min(index, 19)),
     needsApproval: true,
-    estimatedCostMicroUsd: Number.MAX_SAFE_INTEGER,
+    estimatedCostMicroUsd: cap,
     estimatedDurationMs: 86400000,
   }));
   const each = Math.floor((200000 - jsonBytes(subtasks)) / 20 / 6);
@@ -2416,11 +2595,12 @@ test("all subtasks of a plan have at most 200000 bytes as JSON", () => {
 
 test("the largest valid M3 events and the task detail notice stay under 1 MiB", () => {
   const worst = "\u0001".repeat(1000);
-  const subtasks = worstPlan();
+  const output = "\u0001".repeat(100000);
+  const worstActor = { kind: "system", id: worst.slice(0, 200) };
   const events = [
     {
       type: "orchestration.PlanProposed",
-      payload: { ...planned, subtasks },
+      payload: { ...proposed, subtasks: worstPlan() },
     },
     {
       type: "orchestration.ClarificationRequested",
@@ -2431,50 +2611,167 @@ test("the largest valid M3 events and the task detail notice stay under 1 MiB", 
     },
     {
       type: "orchestration.SteeringMessageAdded",
-      payload: { ...answered, text: "\u0001".repeat(20000) },
+      payload: { ...answered, runId: id2, text: "\u0001".repeat(20000) },
+    },
+    {
+      type: "orchestration.SubtaskCompleted",
+      payload: {
+        ...payloadOf("orchestration.SubtaskCompleted"),
+        text: output,
+        costMicroUsd: cap,
+      },
+    },
+    {
+      type: "orchestration.CallSettled",
+      payload: {
+        ...payloadOf("orchestration.CallSettled"),
+        text: output,
+        costMicroUsd: cap,
+      },
+    },
+    {
+      type: "llm.CallCompleted",
+      payload: {
+        ...completed,
+        model: `a/${"b".repeat(198)}`,
+        text: output,
+        costMicroUsd: cap,
+        ...totals,
+      },
     },
   ];
   for (const sample of events) {
-    const value = { ...event, ...sample };
+    const value = { ...event, actor: worstActor, ...sample };
     assert.equal(RegisteredEvent.safeParse(value).success, true, sample.type);
     assert.ok(jsonBytes(value) < 1048576, sample.type);
   }
+  const ids = Array.from({ length: 20 }, () => crypto.randomUUID());
   const data = {
     ...detail,
     title: worst.slice(0, 200),
-    plan: { planVersion: Number.MAX_SAFE_INTEGER, subtasks },
-    subtasks: subtasks.map(({ subtaskId }) => ({
+    plan: {
+      planVersion: Number.MAX_SAFE_INTEGER,
+      subtasks: ids.map((subtaskId) => ({
+        subtaskId,
+        title: worst.slice(0, 200),
+        instructions: "\u0001".repeat(4000),
+        agentId: id,
+        model: `a/${"b".repeat(198)}`,
+        dependsOn: ids.filter((other) => other !== subtaskId),
+        needsApproval: true,
+        estimatedCostMicroUsd: cap,
+        estimatedDurationMs: 86400000,
+      })),
+    },
+    currentCall: { callId: id, kind: "aggregate" },
+    subtasks: ids.map((subtaskId) => ({
       ...subtaskState,
       subtaskId,
-      status: "retrying",
+      status: "awaiting_approval",
       tries: Number.MAX_SAFE_INTEGER,
       endedAt: now,
       retryAt: now,
       inputTokens: Number.MAX_SAFE_INTEGER,
       outputTokens: Number.MAX_SAFE_INTEGER,
-      costMicroUsd: Number.MAX_SAFE_INTEGER,
+      costMicroUsd: cap,
       reason: worst,
     })),
-    checkpoints: subtasks.map(({ subtaskId }) => ({
+    checkpoints: ids.map((subtaskId) => ({
       ...checkpoint,
       checkpointId: subtaskId,
       subtaskId,
       reason: worst,
-      status: "refused",
+      status: "expired",
       comment: worst,
+      deadline: now,
       resolvedAt: now,
     })),
-    costMicroUsd: Number.MAX_SAFE_INTEGER,
+    costMicroUsd: cap,
     reason: worst,
+    rev: Number.MAX_SAFE_INTEGER,
+    asOf: Number.MAX_SAFE_INTEGER,
   };
+  assert.ok(
+    data.plan.subtasks.every(({ dependsOn }) => dependsOn.length === 19),
+  );
   const notice = {
     ...viewMessage,
+    actor: worstActor,
+    version: Number.MAX_SAFE_INTEGER,
     type: `view.task.${id}`,
-    payload: { ...view, topic: `task:${id}`, data },
+    payload: {
+      ...view,
+      topic: `task:${id}`,
+      docId: worst.slice(0, 200),
+      rev: Number.MAX_SAFE_INTEGER,
+      data,
+    },
   };
   assert.equal(NoticeDataV1.task.safeParse(data).success, true);
   assert.equal(ViewMessageV1.safeParse(notice).success, true);
-  assert.ok(jsonBytes(notice) < 1048576);
+  assert.ok(jsonBytes(notice) < 1048576, String(jsonBytes(notice)));
+});
+
+test("the JSON Schema of a plan does not have the rules that are only in zod", () => {
+  const cyclic = [
+    { ...subtaskA, dependsOn: [id2] },
+    { ...subtaskB, dependsOn: [id] },
+  ];
+  const json = z.fromJSONSchema(z.toJSONSchema(PlanSubtasks, { io: "input" }));
+  assert.equal(json.safeParse(cyclic).success, true);
+  assert.equal(PlanSubtasks.safeParse(cyclic).success, false);
+});
+
+test("the task detail keeps only the latest checkpoint of each subtask", () => {
+  refusedAt(
+    TaskDetailV1,
+    {
+      ...detail,
+      checkpoints: [checkpoint, { ...checkpoint, checkpointId: id }],
+    },
+    "checkpoints",
+  );
+});
+
+test("subtaskId comes with the call kind subtask only", () => {
+  const settled = payloadOf("orchestration.CallSettled");
+  for (const [schema, value] of [
+    [CallSettledEventPayloadV1, without(settled, "subtaskId")],
+    [CallSettledEventPayloadV1, { ...settled, kind: "check" }],
+    [CallRequestedEventPayloadV1, { ...requested, subtaskId: id }],
+    [CallRequestedEventPayloadV1, { ...requested, kind: "subtask" }],
+    [
+      CallRequestedEventPayloadV1,
+      { ...requested, kind: "plan", subtaskId: id },
+    ],
+  ] as [z.ZodType, unknown][])
+    refusedAt(schema, value, "subtaskId");
+});
+
+test("the call totals come together, and only on the final attempt", () => {
+  refusedAt(
+    CallCompletedEventPayloadV1,
+    without({ ...completed, ...totals }, "callOutputTokens"),
+    "callCostMicroUsd",
+  );
+  refusedAt(
+    CallFailedEventPayloadV1,
+    without({ ...failed, callCostMicroUsd: 5 }, "nextModel"),
+    "callCostMicroUsd",
+  );
+  refusedAt(
+    CallFailedEventPayloadV1,
+    { ...failed, ...totals },
+    "callCostMicroUsd",
+  );
+});
+
+test("a message with a taskId has no mode", () => {
+  refusedAt(
+    PostOwnerMessageCommandPayloadV1,
+    { conversationId: id, text: "Go on", taskId: id2, mode: "auto" },
+    "mode",
+  );
 });
 
 test("a new task message keeps its mode, and other intents have none", () => {

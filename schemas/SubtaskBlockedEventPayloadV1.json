@@ -38,5 +38,5 @@
     "code",
     "reason"
   ],
-  "description": "The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing."
+  "description": "The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing. `RunBlocked` with the same code follows."
 }

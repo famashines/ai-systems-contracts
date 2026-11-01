@@ -80,7 +80,7 @@
         "taskId",
         "runId"
       ],
-      "description": "The owner resumed the run."
+      "description": "The run goes on after a pause or a block."
     }
   },
   "required": [

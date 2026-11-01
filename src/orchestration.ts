@@ -7,6 +7,7 @@ import {
   Reason,
   Timestamp,
 } from "./common.ts";
+import { CapMicroUsd } from "./budget.ts";
 import { ErrorCode } from "./errors.ts";
 import { OutputText } from "./llm.ts";
 
@@ -116,11 +117,16 @@ export const RunBlockedEventPayloadV1 = z
   .object({
     taskId: Id,
     runId: Id,
-    code: ErrorCode.extract(["budget_refused", "runaway_stopped"]),
+    code: ErrorCode.extract([
+      "budget_refused",
+      "runaway_stopped",
+      "forbidden",
+      "subtask_failed",
+    ]),
     reason: Reason,
   })
   .describe(
-    "The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it.",
+    "The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed.",
   );
 export type RunBlockedEventPayloadV1 = z.infer<typeof RunBlockedEventPayloadV1>;
 
@@ -129,6 +135,16 @@ export const CallMessage = z.object({
   content: z.string().min(1).max(100000),
 });
 export type CallMessage = z.infer<typeof CallMessage>;
+
+export const CallKind = z.enum(["plan", "aggregate", "check", "subtask"]);
+export type CallKind = z.infer<typeof CallKind>;
+
+const subtaskOfKind = (call: { kind?: CallKind; subtaskId?: string }) =>
+  (call.kind === "subtask") === (call.subtaskId !== undefined);
+const subtaskOfKindRule = {
+  message: "subtaskId is present only for the kind subtask",
+  path: ["subtaskId"],
+};
 
 export const CallRequestedEventPayloadV1 = z
   .object({
@@ -155,9 +171,12 @@ export const CallRequestedEventPayloadV1 = z
     maxTokens: z.int().min(1).max(16384),
     maxDurationMs: DurationMs,
     maxCostMicroUsd: MicroUsd.exactOptional(),
+    kind: CallKind.exactOptional(),
+    subtaskId: Id.exactOptional(),
   })
+  .refine(subtaskOfKind, subtaskOfKindRule)
   .describe(
-    "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt.",
+    "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`.",
   );
 export type CallRequestedEventPayloadV1 = z.infer<
   typeof CallRequestedEventPayloadV1
@@ -208,9 +227,10 @@ export const PlanSubtask = z.object({
     .max(19)
     .refine((ids) => new Set(ids).size === ids.length, {
       message: "Each dependency comes once",
+      abort: true,
     }),
   needsApproval: z.boolean(),
-  estimatedCostMicroUsd: MicroUsd.exactOptional(),
+  estimatedCostMicroUsd: CapMicroUsd.exactOptional(),
   estimatedDurationMs: z.int().nonnegative().max(86400000).exactOptional(),
 });
 export type PlanSubtask = z.infer<typeof PlanSubtask>;
@@ -265,13 +285,21 @@ export type PlanSubtasks = z.infer<typeof PlanSubtasks>;
 
 const PlanVersion = z.int().min(1);
 const TryNumber = z.int().min(1);
+const Tokens = z.int().nonnegative();
+const usage = {
+  inputTokens: Tokens,
+  outputTokens: Tokens,
+  costMicroUsd: CapMicroUsd,
+};
 
 export const ClarificationRequestedEventPayloadV1 = z
   .object({
     taskId: Id,
     questions: z.array(ClarifyingQuestion).min(1).max(5),
   })
-  .describe("The orchestrator needs answers before it plans.");
+  .describe(
+    "The orchestrator needs answers before it plans. Only a task with a `conversationId` asks questions.",
+  );
 export type ClarificationRequestedEventPayloadV1 = z.infer<
   typeof ClarificationRequestedEventPayloadV1
 >;
@@ -293,9 +321,9 @@ export type ClarificationAnsweredEventPayloadV1 = z.infer<
 >;
 
 export const SteeringMessageAddedEventPayloadV1 = z
-  .object(ownerMessage)
+  .object({ ...ownerMessage, runId: Id })
   .describe(
-    "The owner sent a `steer` message for the task. Running subtasks get it at their next call.",
+    "The owner sent a `steer` message during the run. Only subtasks that have not started get it. M3 has no re-plan.",
   );
 export type SteeringMessageAddedEventPayloadV1 = z.infer<
   typeof SteeringMessageAddedEventPayloadV1
@@ -304,9 +332,9 @@ export type SteeringMessageAddedEventPayloadV1 = z.infer<
 const plan = { taskId: Id, planVersion: PlanVersion, subtasks: PlanSubtasks };
 
 export const PlanProposedEventPayloadV1 = z
-  .object(plan)
+  .object({ ...plan, awaitsApproval: z.boolean() })
   .describe(
-    "A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task.",
+    "A plan with subtasks, dependencies (a DAG), agents, and cost and time estimates. `planVersion` goes up by 1 for each new plan of the task. `awaitsApproval` is false in auto mode, where `PlanApproved` follows.",
   );
 export type PlanProposedEventPayloadV1 = z.infer<
   typeof PlanProposedEventPayloadV1
@@ -315,7 +343,7 @@ export type PlanProposedEventPayloadV1 = z.infer<
 export const PlanEditedEventPayloadV1 = z
   .object(plan)
   .describe(
-    "The owner changed the plan. It has the full new plan with the next `planVersion`.",
+    "The owner changed the plan. It has the full new plan with the next `planVersion`, and the estimates of orchestration.",
   );
 export type PlanEditedEventPayloadV1 = z.infer<typeof PlanEditedEventPayloadV1>;
 
@@ -340,7 +368,7 @@ const subtask = { taskId: Id, runId: Id, subtaskId: Id };
 export const SubtaskQueuedEventPayloadV1 = z
   .object(subtask)
   .describe(
-    "The subtask can start: its dependencies are done, or the owner retried it.",
+    "The subtask can start: its dependencies are done, or the owner retried it. A retry starts the count of tries again.",
   );
 export type SubtaskQueuedEventPayloadV1 = z.infer<
   typeof SubtaskQueuedEventPayloadV1
@@ -349,7 +377,7 @@ export type SubtaskQueuedEventPayloadV1 = z.infer<
 export const SubtaskWaitingEventPayloadV1 = z
   .object(subtask)
   .describe(
-    "The subtask waits for its dependencies. A wait for the owner is `CheckpointOpened`.",
+    "The subtask waits for its dependencies. It is not a wait for the owner: that is `CheckpointOpened`.",
   );
 export type SubtaskWaitingEventPayloadV1 = z.infer<
   typeof SubtaskWaitingEventPayloadV1
@@ -370,27 +398,25 @@ export type SubtaskStartedEventPayloadV1 = z.infer<
   typeof SubtaskStartedEventPayloadV1
 >;
 
-const Tokens = z.int().nonnegative();
-
 export const SubtaskCompletedEventPayloadV1 = z
-  .object({
-    ...subtask,
-    callId: Id,
-    inputTokens: Tokens,
-    outputTokens: Tokens,
-    costMicroUsd: MicroUsd,
-  })
+  .object({ ...subtask, callId: Id, text: OutputText, ...usage })
   .describe(
-    "The subtask is done. Its output is the text of `llm.CallCompleted` of `callId`. Tokens and cost are the totals of all its calls in this run.",
+    "The subtask is done with the output `text` of the call `callId`. Tokens and cost are the values of that call.",
   );
 export type SubtaskCompletedEventPayloadV1 = z.infer<
   typeof SubtaskCompletedEventPayloadV1
 >;
 
 export const SubtaskFailedEventPayloadV1 = z
-  .object({ ...subtask, tryNumber: TryNumber, code: ErrorCode, reason: Reason })
+  .object({
+    ...subtask,
+    tryNumber: TryNumber,
+    code: ErrorCode,
+    reason: Reason,
+    ...usage,
+  })
   .describe(
-    "One try of the subtask failed, with a code and a plain reason. `SubtaskRetrying` follows when a retry is left.",
+    "One try of the subtask failed, with a code, a plain reason, and the tokens and cost of the try. `SubtaskRetrying` follows when a try is left, else `RunBlocked` with the code `subtask_failed`.",
   );
 export type SubtaskFailedEventPayloadV1 = z.infer<
   typeof SubtaskFailedEventPayloadV1
@@ -410,7 +436,7 @@ export const SubtaskBlockedEventPayloadV1 = z
     reason: Reason,
   })
   .describe(
-    "The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing.",
+    "The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing. `RunBlocked` with the same code follows.",
   );
 export type SubtaskBlockedEventPayloadV1 = z.infer<
   typeof SubtaskBlockedEventPayloadV1
@@ -426,9 +452,14 @@ export type SubtaskReassignedEventPayloadV1 = z.infer<
 >;
 
 export const CheckpointOpenedEventPayloadV1 = z
-  .object({ ...subtask, checkpointId: Id, reason: Reason })
+  .object({
+    ...subtask,
+    checkpointId: Id,
+    reason: Reason,
+    deadline: Timestamp.exactOptional(),
+  })
   .describe(
-    "The run waits for the owner to approve the start of a subtask. `reason` says why.",
+    "The run waits for the owner to approve the start of a subtask. Orchestration writes the `reason`: Approval needed for <subtask title>. After `deadline` the checkpoint expires.",
   );
 export type CheckpointOpenedEventPayloadV1 = z.infer<
   typeof CheckpointOpenedEventPayloadV1
@@ -437,16 +468,22 @@ export type CheckpointOpenedEventPayloadV1 = z.infer<
 export const CheckpointDecision = z.enum(["approved", "refused"]);
 export type CheckpointDecision = z.infer<typeof CheckpointDecision>;
 
+export const CheckpointOutcome = z.enum([
+  ...CheckpointDecision.options,
+  "expired",
+]);
+export type CheckpointOutcome = z.infer<typeof CheckpointOutcome>;
+
 export const CheckpointResolvedEventPayloadV1 = z
   .object({
     taskId: Id,
     runId: Id,
     checkpointId: Id,
-    decision: CheckpointDecision,
+    decision: CheckpointOutcome,
     comment: Reason.exactOptional(),
   })
   .describe(
-    "The owner approved or refused a checkpoint, with an optional comment.",
+    "The owner approved or refused a checkpoint, with an optional comment, or the system closed it at its deadline (`expired`). A refused or expired checkpoint fails its subtask, and the run goes blocked.",
   );
 export type CheckpointResolvedEventPayloadV1 = z.infer<
   typeof CheckpointResolvedEventPayloadV1
@@ -463,16 +500,25 @@ export type RunPausedEventPayloadV1 = z.infer<typeof RunPausedEventPayloadV1>;
 
 export const RunResumedEventPayloadV1 = z
   .object(run)
-  .describe("The owner resumed the run.");
+  .describe("The run goes on after a pause or a block.");
 export type RunResumedEventPayloadV1 = z.infer<typeof RunResumedEventPayloadV1>;
 
 export const RunCancelledEventPayloadV1 = z
   .object({ ...run, reason: Reason.exactOptional() })
   .describe(
-    "The owner cancelled the run. Running calls stop and the task ends as `cancelled`.",
+    "The owner cancelled the run. `CallCancelRequested` stops the running calls, and the task ends as `cancelled`.",
   );
 export type RunCancelledEventPayloadV1 = z.infer<
   typeof RunCancelledEventPayloadV1
+>;
+
+export const TaskCancelledEventPayloadV1 = z
+  .object({ taskId: Id, reason: Reason.exactOptional() })
+  .describe(
+    "The owner cancelled a task that has no run (status `submitted`, `clarifying` or `planning`). `CallCancelRequested` stops the running orchestrator call, and the task ends as `cancelled`.",
+  );
+export type TaskCancelledEventPayloadV1 = z.infer<
+  typeof TaskCancelledEventPayloadV1
 >;
 
 export const TaskModeChangedEventPayloadV1 = z
@@ -482,6 +528,32 @@ export type TaskModeChangedEventPayloadV1 = z.infer<
   typeof TaskModeChangedEventPayloadV1
 >;
 
+export const CallSettledEventPayloadV1 = z
+  .object({
+    taskId: Id,
+    callId: Id,
+    kind: CallKind,
+    subtaskId: Id.exactOptional(),
+    ...usage,
+    text: OutputText.exactOptional(),
+  })
+  .refine(subtaskOfKind, subtaskOfKindRule)
+  .describe(
+    "A call of the task has its final outcome: completed, failed or cancelled. Tokens and cost are the totals of all its attempts, and `text` is its output when it gave one. The cost of the task is the sum of these costs.",
+  );
+export type CallSettledEventPayloadV1 = z.infer<
+  typeof CallSettledEventPayloadV1
+>;
+
+export const CallCancelRequestedEventPayloadV1 = z
+  .object({ taskId: Id, callId: Id })
+  .describe(
+    "Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve.",
+  );
+export type CallCancelRequestedEventPayloadV1 = z.infer<
+  typeof CallCancelRequestedEventPayloadV1
+>;
+
 const planCommand = { taskId: Id, planVersion: PlanVersion };
 
 export const ApprovePlanCommandPayloadV1 = z.object(planCommand);
@@ -489,10 +561,11 @@ export type ApprovePlanCommandPayloadV1 = z.infer<
   typeof ApprovePlanCommandPayloadV1
 >;
 
-export const EditPlanCommandPayloadV1 = z.object({
-  ...planCommand,
-  subtasks: PlanSubtasks,
-});
+export const EditPlanCommandPayloadV1 = z
+  .object({ ...planCommand, subtasks: PlanSubtasks })
+  .describe(
+    "Orchestration makes its own estimates and ignores the estimates in this command.",
+  );
 export type EditPlanCommandPayloadV1 = z.infer<typeof EditPlanCommandPayloadV1>;
 
 export const RejectPlanCommandPayloadV1 = z.object({
@@ -519,6 +592,9 @@ export const CancelRunCommandPayloadV1 = taskCommand.extend({
 export type CancelRunCommandPayloadV1 = z.infer<
   typeof CancelRunCommandPayloadV1
 >;
+
+export const CancelTaskCommandPayloadV1 = CancelRunCommandPayloadV1;
+export type CancelTaskCommandPayloadV1 = CancelRunCommandPayloadV1;
 
 export const RetrySubtaskCommandPayloadV1 = taskCommand.extend({
   subtaskId: Id,
@@ -553,13 +629,16 @@ export type ResolveCheckpointCommandPayloadV1 = z.infer<
 >;
 
 export const SubtaskStatus = z.enum([
-  "queued",
   "waiting",
+  "queued",
+  "awaiting_approval",
   "running",
   "retrying",
   "blocked",
   "failed",
   "done",
+  "cancelled",
+  "skipped",
 ]);
 export type SubtaskStatus = z.infer<typeof SubtaskStatus>;
 
@@ -571,9 +650,7 @@ export const SubtaskStateV1 = z.object({
   startedAt: Timestamp.exactOptional(),
   endedAt: Timestamp.exactOptional(),
   retryAt: Timestamp.exactOptional(),
-  inputTokens: Tokens,
-  outputTokens: Tokens,
-  costMicroUsd: MicroUsd,
+  ...usage,
   reason: Reason.exactOptional(),
 });
 export type SubtaskStateV1 = z.infer<typeof SubtaskStateV1>;
@@ -582,12 +659,19 @@ export const CheckpointV1 = z.object({
   checkpointId: Id,
   subtaskId: Id,
   reason: Reason,
-  status: z.enum(["open", ...CheckpointDecision.options]),
+  status: z.enum(["open", ...CheckpointOutcome.options]),
   comment: Reason.exactOptional(),
   openedAt: Timestamp,
+  deadline: Timestamp.exactOptional(),
   resolvedAt: Timestamp.exactOptional(),
 });
 export type CheckpointV1 = z.infer<typeof CheckpointV1>;
+
+export const CallRef = z.object({
+  callId: Id,
+  kind: CallKind.exclude(["subtask"]),
+});
+export type CallRef = z.infer<typeof CallRef>;
 
 export const TaskDetailV1 = z.object({
   taskId: Id,
@@ -598,12 +682,24 @@ export const TaskDetailV1 = z.object({
   createdAt: Timestamp,
   updatedAt: Timestamp,
   plan: z
-    .object({ planVersion: PlanVersion, subtasks: PlanSubtasks })
+    .object({
+      planVersion: PlanVersion,
+      subtasks: z.array(PlanSubtask).max(20),
+    })
     .exactOptional(),
   runId: Id.exactOptional(),
+  currentCall: CallRef.nullable(),
   subtasks: z.array(SubtaskStateV1).max(20),
-  checkpoints: z.array(CheckpointV1).max(20),
-  costMicroUsd: MicroUsd,
+  checkpoints: z
+    .array(CheckpointV1)
+    .max(20)
+    .refine(
+      (checkpoints) =>
+        new Set(checkpoints.map((checkpoint) => checkpoint.subtaskId)).size ===
+        checkpoints.length,
+      { message: "Only the latest checkpoint of each subtask" },
+    ),
+  costMicroUsd: CapMicroUsd,
   reason: Reason.exactOptional(),
   rev: z.int().nonnegative(),
   asOf: z.int().min(1),

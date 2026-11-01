@@ -9,10 +9,14 @@ export const PushToken = z
   .max(4096, { abort: true })
   .regex(/^[\x21-\x7e]+$/);
 
+export const DeviceLocale = z.enum(["en", "de", "ur"]);
+export type DeviceLocale = z.infer<typeof DeviceLocale>;
+
 export const RegisterDeviceCommandPayloadV1 = z.object({
   deviceId: Id,
   platform: DevicePlatform,
   token: PushToken,
+  locale: DeviceLocale,
 });
 export type RegisterDeviceCommandPayloadV1 = z.infer<
   typeof RegisterDeviceCommandPayloadV1

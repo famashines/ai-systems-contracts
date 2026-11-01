@@ -23,5 +23,5 @@
     "runId",
     "subtaskId"
   ],
-  "description": "The subtask can start: its dependencies are done, or the owner retried it."
+  "description": "The subtask can start: its dependencies are done, or the owner retried it. A retry starts the count of tries again."
 }

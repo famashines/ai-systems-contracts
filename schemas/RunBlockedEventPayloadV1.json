@@ -16,7 +16,9 @@
       "type": "string",
       "enum": [
         "budget_refused",
-        "runaway_stopped"
+        "runaway_stopped",
+        "forbidden",
+        "subtask_failed"
       ]
     },
     "reason": {
@@ -31,5 +33,5 @@
     "code",
     "reason"
   ],
-  "description": "The run cannot go on until the owner acts: the budget refused a call, or a runaway rule stopped it."
+  "description": "The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed."
 }

@@ -59,7 +59,7 @@
           "estimatedCostMicroUsd": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 9007199254740991
+            "maximum": 1000000000000
           },
           "estimatedDurationMs": {
             "type": "integer",
@@ -83,5 +83,5 @@
     "planVersion",
     "subtasks"
   ],
-  "description": "The owner changed the plan. It has the full new plan with the next `planVersion`."
+  "description": "The owner changed the plan. It has the full new plan with the next `planVersion`, and the estimates of orchestration."
 }

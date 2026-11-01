@@ -17,11 +17,20 @@
       "type": "string",
       "maxLength": 4096,
       "pattern": "^[\\x21-\\x7e]+$"
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "en",
+        "de",
+        "ur"
+      ]
     }
   },
   "required": [
     "deviceId",
     "platform",
-    "token"
+    "token",
+    "locale"
   ]
 }
