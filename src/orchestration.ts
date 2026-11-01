@@ -9,7 +9,7 @@ import {
 } from "./common.ts";
 import { CapMicroUsd } from "./budget.ts";
 import { ErrorCode } from "./errors.ts";
-import { OutputText } from "./llm.ts";
+import { OutputText, ReasoningEffort } from "./llm.ts";
 
 export const TaskMode = z.enum(["auto", "approval"]);
 export type TaskMode = z.infer<typeof TaskMode>;
@@ -39,6 +39,8 @@ export const TaskSubmittedEventPayloadV1 = z
     mode: TaskMode,
     conversationId: Id.exactOptional(),
     messageId: Id.exactOptional(),
+    model: ModelId.exactOptional(),
+    effort: ReasoningEffort.exactOptional(),
   })
   .refine(
     (task) =>
@@ -49,7 +51,7 @@ export const TaskSubmittedEventPayloadV1 = z
     },
   )
   .describe(
-    "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat.",
+    "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. `model` and `effort` are the choice of the owner for all calls of the task; absent means the model chain of each agent and no effort.",
   );
 export type TaskSubmittedEventPayloadV1 = z.infer<
   typeof TaskSubmittedEventPayloadV1
@@ -168,15 +170,16 @@ export const CallRequestedEventPayloadV1 = z
       .refine((models) => new Set(models).size === models.length, {
         message: "Each model comes once",
       }),
-    maxTokens: z.int().min(1).max(16384),
+    maxTokens: z.int().min(1).max(32000),
     maxDurationMs: DurationMs,
     maxCostMicroUsd: MicroUsd.exactOptional(),
     kind: CallKind.exactOptional(),
     subtaskId: Id.exactOptional(),
+    effort: ReasoningEffort.exactOptional(),
   })
   .refine(subtaskOfKind, subtaskOfKindRule)
   .describe(
-    "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`.",
+    "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`. `effort` is the reasoning effort of the task; absent means that ai-proxy sends no effort.",
   );
 export type CallRequestedEventPayloadV1 = z.infer<
   typeof CallRequestedEventPayloadV1
@@ -445,7 +448,7 @@ export type SubtaskBlockedEventPayloadV1 = z.infer<
 export const SubtaskReassignedEventPayloadV1 = z
   .object({ ...subtask, agentId: Id, model: ModelId.exactOptional() })
   .describe(
-    "The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent.",
+    "The owner gave a subtask that is not running a different agent or model. No `model` means the task model, else the model chain of the agent.",
   );
 export type SubtaskReassignedEventPayloadV1 = z.infer<
   typeof SubtaskReassignedEventPayloadV1
@@ -679,6 +682,8 @@ export const TaskDetailV1 = z.object({
   status: TaskStatus,
   mode: TaskMode,
   conversationId: Id.exactOptional(),
+  model: ModelId.exactOptional(),
+  effort: ReasoningEffort.exactOptional(),
   createdAt: Timestamp,
   updatedAt: Timestamp,
   plan: z

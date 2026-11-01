@@ -6,12 +6,12 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 
 | Type | Schema version | Meaning | JSON Schema |
 | ---- | -------------- | ------- | ----------- |
-| `orchestration.TaskSubmitted` | 1 | The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. | [events/orchestration.TaskSubmitted.v1.json](../schemas/events/orchestration.TaskSubmitted.v1.json) |
+| `orchestration.TaskSubmitted` | 1 | The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. `model` and `effort` are the choice of the owner for all calls of the task; absent means the model chain of each agent and no effort. | [events/orchestration.TaskSubmitted.v1.json](../schemas/events/orchestration.TaskSubmitted.v1.json) |
 | `orchestration.RunStarted` | 1 | Execution of the approved plan starts. | [events/orchestration.RunStarted.v1.json](../schemas/events/orchestration.RunStarted.v1.json) |
 | `orchestration.RunCompleted` | 1 | The run ended with a result summary and the cost of the attempt that gave it. | [events/orchestration.RunCompleted.v1.json](../schemas/events/orchestration.RunCompleted.v1.json) |
 | `orchestration.RunFailed` | 1 | The run ended with no result, with a code and a plain reason. | [events/orchestration.RunFailed.v1.json](../schemas/events/orchestration.RunFailed.v1.json) |
 | `orchestration.RunBlocked` | 1 | The run cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, a permission is missing, or a subtask failed. | [events/orchestration.RunBlocked.v1.json](../schemas/events/orchestration.RunBlocked.v1.json) |
-| `orchestration.CallRequested` | 1 | A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`. | [events/orchestration.CallRequested.v1.json](../schemas/events/orchestration.CallRequested.v1.json) |
+| `orchestration.CallRequested` | 1 | A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`. `effort` is the reasoning effort of the task; absent means that ai-proxy sends no effort. | [events/orchestration.CallRequested.v1.json](../schemas/events/orchestration.CallRequested.v1.json) |
 | `orchestration.MessageRefused` | 1 | A `steer` or `answer` message for a task that cannot take it, with the reason. | [events/orchestration.MessageRefused.v1.json](../schemas/events/orchestration.MessageRefused.v1.json) |
 | `orchestration.ClarificationRequested` | 1 | The orchestrator needs answers before it plans. Only a task with a `conversationId` asks questions. | [events/orchestration.ClarificationRequested.v1.json](../schemas/events/orchestration.ClarificationRequested.v1.json) |
 | `orchestration.ClarificationAnswered` | 1 | The owner answered the clarifying questions with an `answer` message of the thread. | [events/orchestration.ClarificationAnswered.v1.json](../schemas/events/orchestration.ClarificationAnswered.v1.json) |
@@ -26,7 +26,7 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | `orchestration.SubtaskFailed` | 1 | One try of the subtask failed, with a code, a plain reason, and the tokens and cost of the try. `SubtaskRetrying` follows when a try is left, else `RunBlocked` with the code `subtask_failed`. | [events/orchestration.SubtaskFailed.v1.json](../schemas/events/orchestration.SubtaskFailed.v1.json) |
 | `orchestration.SubtaskRetrying` | 1 | The subtask starts try `tryNumber` at `retryAt` (backoff). | [events/orchestration.SubtaskRetrying.v1.json](../schemas/events/orchestration.SubtaskRetrying.v1.json) |
 | `orchestration.SubtaskBlocked` | 1 | The subtask cannot go on until the owner acts: the budget refused a call, a runaway rule stopped it, or a permission is missing. `RunBlocked` with the same code follows. | [events/orchestration.SubtaskBlocked.v1.json](../schemas/events/orchestration.SubtaskBlocked.v1.json) |
-| `orchestration.SubtaskReassigned` | 1 | The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent. | [events/orchestration.SubtaskReassigned.v1.json](../schemas/events/orchestration.SubtaskReassigned.v1.json) |
+| `orchestration.SubtaskReassigned` | 1 | The owner gave a subtask that is not running a different agent or model. No `model` means the task model, else the model chain of the agent. | [events/orchestration.SubtaskReassigned.v1.json](../schemas/events/orchestration.SubtaskReassigned.v1.json) |
 | `orchestration.CheckpointOpened` | 1 | The run waits for the owner to approve the start of a subtask. Orchestration writes the `reason`: Approval needed for <subtask title>. After `deadline` the checkpoint expires. | [events/orchestration.CheckpointOpened.v1.json](../schemas/events/orchestration.CheckpointOpened.v1.json) |
 | `orchestration.CheckpointResolved` | 1 | The owner approved or refused a checkpoint, with an optional comment, or the system closed it at its deadline (`expired`). A refused or expired checkpoint fails its subtask, and the run goes blocked. | [events/orchestration.CheckpointResolved.v1.json](../schemas/events/orchestration.CheckpointResolved.v1.json) |
 | `orchestration.RunPaused` | 1 | The owner paused the run. No new call starts. Running calls finish. | [events/orchestration.RunPaused.v1.json](../schemas/events/orchestration.RunPaused.v1.json) |
@@ -38,7 +38,7 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 | `orchestration.CallSettled` | 1 | A call of the task has its final outcome: completed, failed or cancelled. Tokens and cost are the totals of all its attempts, and `text` is its output when it gave one. The cost of the task is the sum of these costs. | [events/orchestration.CallSettled.v1.json](../schemas/events/orchestration.CallSettled.v1.json) |
 | `orchestration.CallCancelRequested` | 1 | Orchestration asks ai-proxy to stop a call. ai-proxy ends it with `llm.CallFailed` and the class `cancelled`. A `CallRequested` for the same `callId` that comes later gets the same answer, with no reserve. | [events/orchestration.CallCancelRequested.v1.json](../schemas/events/orchestration.CallCancelRequested.v1.json) |
 | `conversation.ConversationStarted` | 1 | A new chat thread. | [events/conversation.ConversationStarted.v1.json](../schemas/events/conversation.ConversationStarted.v1.json) |
-| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
+| `conversation.OwnerMessagePosted` | 1 | The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. `model` and `effort` are the choice of the owner for a new task; absent means auto. | [events/conversation.OwnerMessagePosted.v1.json](../schemas/events/conversation.OwnerMessagePosted.v1.json) |
 | `conversation.AgentReplyPosted` | 1 | An agent reply in a thread, made from the orchestration event `sourceEventId`. | [events/conversation.AgentReplyPosted.v1.json](../schemas/events/conversation.AgentReplyPosted.v1.json) |
 | `prompts.PromptCreated` | 1 | A new prompt. | [events/prompts.PromptCreated.v1.json](../schemas/events/prompts.PromptCreated.v1.json) |
 | `prompts.PromptVersionPublished` | 1 | A new immutable version of a prompt, with its variables. | [events/prompts.PromptVersionPublished.v1.json](../schemas/events/prompts.PromptVersionPublished.v1.json) |
@@ -59,7 +59,7 @@ Each event has the envelope `EventEnvelopeV1` (ARCHITECTURE section 5). The tabl
 
 ## orchestration.TaskSubmitted v1
 
-The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat.
+The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. `model` and `effort` are the choice of the owner for all calls of the task; absent means the model chain of each agent and no effort.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -68,6 +68,8 @@ The owner sent a task. `conversationId` and `messageId` are present when it come
 | `mode` | `"auto"` \| `"approval"` | yes |
 | `conversationId` | string (uuid) | no |
 | `messageId` | string (uuid) | no |
+| `model` | string | no |
+| `effort` | `"max"` \| `"xhigh"` \| `"high"` \| `"medium"` \| `"low"` \| `"minimal"` \| `"none"` | no |
 
 ## orchestration.RunStarted v1
 
@@ -113,7 +115,7 @@ The run cannot go on until the owner acts: the budget refused a call, a runaway 
 
 ## orchestration.CallRequested v1
 
-A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`.
+A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`. `effort` is the reasoning effort of the task; absent means that ai-proxy sends no effort.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -128,6 +130,7 @@ A request to ai-proxy for one LLM call: the rendered messages (inputs as data bl
 | `maxCostMicroUsd` | integer | no |
 | `kind` | `"plan"` \| `"aggregate"` \| `"check"` \| `"subtask"` | no |
 | `subtaskId` | string (uuid) | no |
+| `effort` | `"max"` \| `"xhigh"` \| `"high"` \| `"medium"` \| `"low"` \| `"minimal"` \| `"none"` | no |
 
 ## orchestration.MessageRefused v1
 
@@ -292,7 +295,7 @@ The subtask cannot go on until the owner acts: the budget refused a call, a runa
 
 ## orchestration.SubtaskReassigned v1
 
-The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent.
+The owner gave a subtask that is not running a different agent or model. No `model` means the task model, else the model chain of the agent.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -419,7 +422,7 @@ A new chat thread.
 
 ## conversation.OwnerMessagePosted v1
 
-The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`.
+The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. `model` and `effort` are the choice of the owner for a new task; absent means auto.
 
 | Field | Type | Required |
 | ----- | ---- | -------- |
@@ -429,6 +432,8 @@ The owner posted a message in a thread. `taskId` is present for `steer` and `ans
 | `intent` | `"new_task"` \| `"steer"` \| `"answer"` | yes |
 | `taskId` | string (uuid) | no |
 | `mode` | `"auto"` \| `"approval"` | no |
+| `model` | string | no |
+| `effort` | `"max"` \| `"xhigh"` \| `"high"` \| `"medium"` \| `"low"` \| `"minimal"` \| `"none"` | no |
 
 ## conversation.AgentReplyPosted v1
 

@@ -27,7 +27,7 @@ const event = parseEvent(message);
 | `src/conversation.ts`  | `PostOwnerMessage` command, `ConversationStarted`, `OwnerMessagePosted`, `AgentReplyPosted`, thread result                                                                                                                        |
 | `src/prompts.ts`       | `CreatePrompt` and `PublishPromptVersion` commands, `PromptCreated`, `PromptVersionPublished`, `PromptRef`, prompt version result                                                                                                 |
 | `src/agents.ts`        | agent commands, `AgentCreated`, `AgentVersionPublished`, `AgentVersionActivated`, `AgentEnabled`, `AgentDisabled`, `AgentLimits`, agent list and active version results                                                           |
-| `src/llm.ts`           | `CallStarted`, `CallCompleted`, `CallFailed`, `LlmErrorClass`, `FinishReason`                                                                                                                                                     |
+| `src/llm.ts`           | `CallStarted`, `CallCompleted`, `CallFailed`, `LlmErrorClass`, `FinishReason`, `ReasoningEffort`, model list result                                                                                                               |
 | `src/budget.ts`        | `SetBudget` command, `budget.*` events, `BudgetScope`, `CapScope`, rpc reserve and settle messages, `RpcSubject`, `BudgetMonthV1`                                                                                                 |
 | `src/events.ts`        | `eventRegistry`, `eventCatalog`, `latest`, `RegisteredEvent`, `parseEvent`                                                                                                                                                        |
 | `src/views.ts`         | `ViewNoticeV1`, `ViewMessageV1`, `ViewSubject`, `viewSubject`, `topicFromSubject`, `NoticeDataV1`                                                                                                                                 |
@@ -143,6 +143,21 @@ ai-proxy, for each attempt (model chain, first model first):
   `CallCompleted.text` refuses NUL.
 - Retryable classes: `rate_limit`, `timeout`, `provider`. Not retryable:
   `invalid`, `budget_refused`, `cancelled`.
+- `CallRequested` has an optional `effort` (`ReasoningEffort`). ai-proxy
+  sends it to the provider as `reasoning: { effort }`. Absent means that
+  the request has no effort. Orchestration sets `effort` only on a call
+  whose model chain is the task model alone. A subtask with a model that
+  the owner set (`EditPlan` or `ReassignSubtask`) runs with no effort.
+- ai-proxy fails an attempt with the class `invalid`, cost 0 and no
+  reserve, when the effort is not in the `efforts` of the model, or when
+  the effort is not `none` and `maxTokens` is 1024 or less. The provider
+  needs `max_tokens` above the reasoning budget.
+- A task with a model (`TaskSubmitted.model`) uses higher limits for each
+  of its calls, also for a subtask with a model that the owner set:
+  `maxTokens` 32000 and `maxCostMicroUsd` 1,000,000 (1 USD). `maxCalls`
+  stays the agent value. A task with no model uses the agent limits. The
+  month cap applies to all spend. So `CallRequested.maxTokens` is at most
+  32000, and `AgentLimits.maxTokens` stays at most 16384.
 - A call that ends with empty output text gives `orchestration.RunFailed`
   with the code `empty_output`.
 - `orchestration.RunBlocked` (code `budget_refused`, `runaway_stopped`,
@@ -260,9 +275,22 @@ title>`. A checkpoint with a `deadline` expires at that time
   a run (`SteeringMessageAdded` has `runId`). Before the run, a message is
   an answer or it is refused. A steer reaches only the subtasks that have
   not started. M3 has no re-plan.
-- `PostOwnerMessage` has an optional `mode`, and a message with a `taskId`
-  has no `mode`. conversation-hub copies it into `OwnerMessagePosted` only
-  for `new_task`. Absent means `approval`.
+- `PostOwnerMessage` has an optional `mode`, `model` and `effort`. A
+  message with a `taskId` has none of them (api-gateway gives 400).
+  `effort` comes only with `model`, because the efforts of an auto model
+  are not known. conversation-hub copies them into `OwnerMessagePosted`
+  only for `new_task`, and ignores them for `steer` and `answer`. Absent
+  `mode` means `approval`. Absent `model` means auto: the model chain of
+  each agent and no effort. `TaskSubmitted` and `TaskDetailV1` have the
+  `model` and `effort` of the task.
+- The task model applies to all calls of the task: plan, subtasks,
+  aggregate and check. When the task has a model, orchestration drops a
+  model that the planner names. So the `model` of a plan subtask comes
+  only from the owner (`EditPlan` or `ReassignSubtask`), and it wins over
+  the task model. It must be a model of its agent. The plan check does not
+  use the task model, so a task model that no agent has is valid.
+  `SubtaskReassigned` with no `model` means the task model, else the model
+  chain of the agent.
 
 Owner commands (M3-04). The command `type` is `orchestration.<Name>`.
 A money command can start or allow LLM calls. By ADR 0028, orchestration
@@ -373,6 +401,7 @@ and starts again at `i = 0`. The final text comes in the read model.
 | agent list                                | projections   | `AgentListResultV1`          |
 | active agent version by `AgentName`       | agent-manager | `ActiveAgentVersionResultV1` |
 | one prompt version                        | prompt-studio | `PromptVersionResultV1`      |
+| `GET /api/models`                         | ai-proxy      | `ModelListResultV1`          |
 
 The thread result pages the same way as the task list: `items` (newest
 first) and `headSeq`, with the query `limit`, `before` (`createdAt` of the
@@ -403,6 +432,20 @@ read model topic: `tasks` (`TaskListItemV1`), `task:<id>`
 (`TaskDetailV1`, `docId` is the `taskId`), `budget` (`BudgetMonthV1`),
 `agents` (`AgentListItemV1`) and `conversation:<id>`
 (`ConversationMessageV1`).
+
+`GET /api/models` gives the models that the OpenRouter key of ai-proxy
+can use (OpenRouter `GET /api/v1/models/user`), sorted by `name`.
+api-gateway gets it from ai-proxy `GET /internal/models`. ai-proxy makes
+`efforts` from the `reasoning` object of each model:
+
+- `efforts` is always an array, highest effort first.
+- `supported_efforts: null` gives all 7 values of `ReasoningEffort`.
+- No `reasoning` object, or no `supported_efforts`, gives `[]`: the model
+  has no effort control.
+- `mandatory: true` removes `none`.
+- ai-proxy drops a value that is not in `ReasoningEffort`.
+- `defaultEffort` is present only when it is in `efforts` and is not
+  `none`.
 
 ## Events
 

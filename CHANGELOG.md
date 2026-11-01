@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.5.0
+
+The owner chooses the model and the reasoning effort of a task. All
+changes are additive: every v0.4.1 event, command and result stays valid.
+The schema version of each event stays 1.
+
+Released schemas that this version changes:
+
+| Schema                             | Change                                                                                                                                              | Kind                        |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `PostOwnerMessageCommandPayloadV1` | optional `model` and `effort`; a message with a `taskId` has no `mode`, `model` or `effort` (error path `taskId`); `effort` comes only with `model` | optional field              |
+| `OwnerMessagePostedEventPayloadV1` | optional `model` and `effort` in the `new_task` variant                                                                                             | optional field              |
+| `TaskSubmittedEventPayloadV1`      | optional `model` and `effort`                                                                                                                       | optional field              |
+| `TaskDetailV1`                     | optional `model` and `effort`                                                                                                                       | optional field              |
+| `CallRequestedEventPayloadV1`      | optional `effort`; `maxTokens` is at most 32000 (was 16384)                                                                                         | optional field, wider bound |
+| `SubtaskReassignedEventPayloadV1`  | no `model` means the task model, else the model chain of the agent (description)                                                                    | description                 |
+
+New:
+
+- `ReasoningEffort`: `max`, `xhigh`, `high`, `medium`, `low`, `minimal`,
+  `none`.
+- `ModelListItemV1` (`id`, `name`, `efforts`, `defaultEffort`) and
+  `ModelListResultV1` (at most 1000 items), the result of
+  `GET /api/models`.
+- README: the model list rules of ai-proxy, the effort rules of a call,
+  the limits of a task with a model (`maxTokens` 32000 for each call,
+  `maxCostMicroUsd` 1,000,000), and the rules of the task model in a plan.
+
+Deploy order:
+
+A model and an effort can come in only through api-gateway, so api-gateway
+moves last of the services. Every reader of `orchestration.>` and
+`conversation.>` must be on v0.5.0 before it. On v0.4.1 a reader strips
+`model` and `effort`, and it cannot decode a `CallRequested` with
+`maxTokens` above 16384: the kit consumer dead-letters that event before
+the handler runs, and no reply goes back.
+
+1. ai-proxy moves to v0.5.0. On v0.4.1 ai-proxy dead-letters a
+   `CallRequested` with `maxTokens` above 16384 (no `llm.*` reply), and
+   strips `effort`.
+2. orchestration, conversation-hub, projections and audit-trace move to
+   v0.5.0, in any order. On v0.4.1 each of them dead-letters the same
+   `CallRequested`, and strips `model` and `effort` (conversation-hub from
+   the message, projections from `TaskDetailV1`, audit-trace from the
+   audit entry). notification also reads `orchestration.>`: move it to
+   v0.5.0 before it is deployed.
+3. api-gateway moves to v0.5.0, after the network policy from api-gateway
+   to ai-proxy. On v0.4.1 api-gateway strips `model` and `effort` from a
+   message and from `TaskDetailV1`.
+4. The app moves to v0.5.0 and sends `model` and `effort` only after
+   steps 1 to 3.
+
 ## 0.4.1
 
 Do not use v0.4.0. No service installs it. v0.4.1 changes its M3 schemas

@@ -95,6 +95,23 @@
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "model": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "max",
+                    "xhigh",
+                    "high",
+                    "medium",
+                    "low",
+                    "minimal",
+                    "none"
+                  ]
                 }
               },
               "required": [
@@ -102,7 +119,7 @@
                 "text",
                 "mode"
               ],
-              "description": "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat."
+              "description": "The owner sent a task. `conversationId` and `messageId` are present when it comes from the chat. `model` and `effort` are the choice of the owner for all calls of the task; absent means the model chain of each agent and no effort."
             }
           },
           "required": [
@@ -708,7 +725,7 @@
                 "maxTokens": {
                   "type": "integer",
                   "minimum": 1,
-                  "maximum": 16384
+                  "maximum": 32000
                 },
                 "maxDurationMs": {
                   "type": "integer",
@@ -733,6 +750,18 @@
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "max",
+                    "xhigh",
+                    "high",
+                    "medium",
+                    "low",
+                    "minimal",
+                    "none"
+                  ]
                 }
               },
               "required": [
@@ -745,7 +774,7 @@
                 "maxTokens",
                 "maxDurationMs"
               ],
-              "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`."
+              "description": "A request to ai-proxy for one LLM call: the rendered messages (inputs as data blocks), the model chain, and limits. ai-proxy reserves and settles each attempt. `kind` says what the call is for; `subtaskId` is present for the kind `subtask`. M2 calls have no `kind`. `effort` is the reasoning effort of the task; absent means that ai-proxy sends no effort."
             }
           },
           "required": [
@@ -2630,7 +2659,7 @@
                 "subtaskId",
                 "agentId"
               ],
-              "description": "The owner gave a subtask that is not running a different agent or model. No `model` means the model chain of the agent."
+              "description": "The owner gave a subtask that is not running a different agent or model. No `model` means the task model, else the model chain of the agent."
             }
           },
           "required": [
@@ -3956,6 +3985,23 @@
                         "auto",
                         "approval"
                       ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+                    },
+                    "effort": {
+                      "type": "string",
+                      "enum": [
+                        "max",
+                        "xhigh",
+                        "high",
+                        "medium",
+                        "low",
+                        "minimal",
+                        "none"
+                      ]
                     }
                   },
                   "required": [
@@ -4005,7 +4051,7 @@
                   ]
                 }
               ],
-              "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`."
+              "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`. `model` and `effort` are the choice of the owner for a new task; absent means auto."
             }
           },
           "required": [

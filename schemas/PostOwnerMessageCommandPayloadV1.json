@@ -27,6 +27,23 @@
         "auto",
         "approval"
       ]
+    },
+    "model": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^[\\w.-]+\\/[\\w.:-]+$"
+    },
+    "effort": {
+      "type": "string",
+      "enum": [
+        "max",
+        "xhigh",
+        "high",
+        "medium",
+        "low",
+        "minimal",
+        "none"
+      ]
     }
   },
   "required": [

@@ -116,3 +116,27 @@ export const CallFailedEventPayloadV1 = z
     "One attempt failed. `nextModel` is the next model of the fallback chain; absent means that the call failed. The final attempt has the totals of all attempts of the call (`callInputTokens`, `callOutputTokens`, `callCostMicroUsd`).",
   );
 export type CallFailedEventPayloadV1 = z.infer<typeof CallFailedEventPayloadV1>;
+
+export const ReasoningEffort = z.enum([
+  "max",
+  "xhigh",
+  "high",
+  "medium",
+  "low",
+  "minimal",
+  "none",
+]);
+export type ReasoningEffort = z.infer<typeof ReasoningEffort>;
+
+export const ModelListItemV1 = z.object({
+  id: ModelId,
+  name: z.string().min(1).max(200),
+  efforts: z.array(ReasoningEffort).max(7),
+  defaultEffort: ReasoningEffort.exactOptional(),
+});
+export type ModelListItemV1 = z.infer<typeof ModelListItemV1>;
+
+export const ModelListResultV1 = z.object({
+  items: z.array(ModelListItemV1).max(1000),
+});
+export type ModelListResultV1 = z.infer<typeof ModelListResultV1>;
