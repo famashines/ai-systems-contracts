@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Id, MicroUsd, Timestamp } from "./common.ts";
-import { ReplyText, TaskText } from "./orchestration.ts";
+import { ReplyText, TaskMode, TaskText } from "./orchestration.ts";
 
 export const MessageIntent = z.enum(["new_task", "steer", "answer"]);
 export type MessageIntent = z.infer<typeof MessageIntent>;
@@ -11,6 +11,7 @@ export const PostOwnerMessageCommandPayloadV1 = z
     text: TaskText,
     taskId: Id.exactOptional(),
     newTask: z.boolean().default(false),
+    mode: TaskMode.exactOptional(),
   })
   .refine((message) => !(message.newTask && message.taskId !== undefined), {
     message: "A new task has no taskId",
@@ -35,11 +36,12 @@ export const OwnerMessagePostedEventPayloadV1 = z
       ...posted,
       intent: z.literal("new_task"),
       taskId: z.never().exactOptional(),
+      mode: TaskMode.exactOptional(),
     }),
     z.object({ ...posted, intent: z.literal(["steer", "answer"]), taskId: Id }),
   ])
   .describe(
-    "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`.",
+    "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`.",
   );
 export type OwnerMessagePostedEventPayloadV1 = z.infer<
   typeof OwnerMessagePostedEventPayloadV1

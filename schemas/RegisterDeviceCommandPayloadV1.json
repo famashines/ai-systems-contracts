@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "platform": {
+      "type": "string",
+      "enum": [
+        "android"
+      ]
+    },
+    "token": {
+      "type": "string",
+      "maxLength": 4096,
+      "pattern": "^[\\x21-\\x7e]+$"
+    }
+  },
+  "required": [
+    "deviceId",
+    "platform",
+    "token"
+  ]
+}

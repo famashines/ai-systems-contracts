@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.4.0
+
+For M3. All changes are additive: every v0.3.x event, command and result
+stays valid.
+
+Released schemas that this version changes:
+
+| Schema                             | Change                                                             | Kind           |
+| ---------------------------------- | ------------------------------------------------------------------ | -------------- |
+| `PostOwnerMessageCommandPayloadV1` | optional `mode`                                                    | optional field |
+| `OwnerMessagePostedEventPayloadV1` | optional `mode` in the `new_task` variant; absent means `approval` | optional field |
+| `RegisteredEvent`, `eventRegistry` | 21 new `orchestration.*` event types                               | new value      |
+| `NoticeDataV1`                     | new key `task` (`TaskDetailV1` for `task:<id>`)                    | new value      |
+
+Deploy order:
+
+1. conversation-hub and projections move to v0.4.0 first. They read all of
+   `ORCHESTRATION` with `parseEvent`. On v0.3.x a new event type fails the
+   parse, and `kit/messaging` puts the message in the DLQ at once. ai-proxy reads
+   only `orchestration.CallRequested`, so it can stay on v0.3.x.
+2. notification and audit-trace start on v0.4.0.
+3. orchestration sends the new events only after step 1.
+4. api-gateway and conversation-hub move to v0.4.0 before the app sends
+   `mode`. On v0.3.x they strip it, and the task gets the default mode.
+5. Orchestration uses `approval` when `mode` is absent only after the app
+   can approve a plan (M3-08). Until then an M2 app cannot finish a chat
+   task in approval mode.
+
+New:
+
+- Events, all schema version 1, stream `ORCHESTRATION`:
+  `ClarificationRequested`, `ClarificationAnswered`, `PlanProposed`,
+  `PlanEdited`, `PlanApproved`, `PlanRejected`, `SubtaskQueued`,
+  `SubtaskWaiting`, `SubtaskStarted`, `SubtaskCompleted`, `SubtaskFailed`,
+  `SubtaskRetrying`, `SubtaskBlocked`, `SubtaskReassigned`,
+  `CheckpointOpened`, `CheckpointResolved`, `RunPaused`, `RunResumed`,
+  `RunCancelled`, `TaskModeChanged`, `SteeringMessageAdded`.
+- Owner command payloads (M3-04): `ApprovePlan`, `EditPlan`, `RejectPlan`,
+  `PauseRun`, `ResumeRun`, `CancelRun`, `RetrySubtask`, `ReassignSubtask`,
+  `SetTaskMode`, `ResolveCheckpoint`.
+- Plan: `PlanSubtask` and `PlanSubtasks`. 1 to 20 subtasks, unique ids,
+  dependencies inside the plan with no cycle, and at most 200,000 bytes as
+  UTF-8 JSON. Integer micro-USD cost estimates.
+- Reads (M3-07): `TaskDetailV1` (task, plan, subtask states, checkpoints,
+  cost), `SubtaskStateV1`, `SubtaskStatus`, `CheckpointV1`,
+  `TaskOutputV1` (the output text of a subtask or the result of the run).
+- Push (M3-05): `RegisterDeviceCommandPayloadV1`,
+  `UnregisterDeviceCommandPayloadV1`, `PushToken`, `DevicePlatform`
+  (`android`), `PushDataV1`, `PushKind`. No event has the token.
+- Shared schemas: `SubtaskTitle`, `SubtaskInstructions`,
+  `ClarifyingQuestion`, `CheckpointDecision`.
+- README: the end rule of a thread page (only an empty page is the end),
+  the task and plan flow, the owner commands, push.
+- Tests: the largest valid plan event, clarification, steering message and
+  task detail notice stay under the NATS limit of 1 MiB.
+
 ## 0.3.1
 
 - `RunCompletedEventPayloadV1`: a description only, no schema change.

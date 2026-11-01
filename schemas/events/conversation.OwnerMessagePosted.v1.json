@@ -88,6 +88,13 @@
             },
             "taskId": {
               "not": {}
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "approval"
+              ]
             }
           },
           "required": [
@@ -137,7 +144,7 @@
           ]
         }
       ],
-      "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`."
+      "description": "The owner posted a message in a thread. `taskId` is present for `steer` and `answer`, and absent for `new_task`. `mode` is the mode of a new task; absent means `approval`."
     }
   },
   "required": [

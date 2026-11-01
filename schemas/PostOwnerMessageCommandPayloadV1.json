@@ -20,6 +20,13 @@
     "newTask": {
       "default": false,
       "type": "boolean"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "approval"
+      ]
     }
   },
   "required": [

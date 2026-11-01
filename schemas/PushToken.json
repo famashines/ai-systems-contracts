@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "maxLength": 4096,
+  "pattern": "^[\\x21-\\x7e]+$"
+}
